@@ -4,7 +4,7 @@ import random
 from itertools import combinations
 from typing import Dict, List, Tuple
 
-from constants_and_types import RANKS, Card, Hand, Player, Suit
+from constants_and_types import RANKS, Action, Card, Hand, Player, Suit
 from player_actions import get_human_action, get_random_action
 
 
@@ -94,19 +94,17 @@ def evaluate_hand(hand: Hand) -> Tuple[int, List[int]]:
         return (0, unique_ranks)  # High card
 
 
-def best_hand_from_seven(cards: List[Card]) -> Tuple[int, List[int], List[Card]]:
+def best_hand_from_seven(cards: List[Card]) -> Tuple[int, List[int]]:
     """Find the best 5-card hand from 7 cards."""
     best_score = (-1, [])
-    best_hand = []
 
     for combo in combinations(cards, 5):
         hand_type, tiebreakers = evaluate_hand(list(combo))
         score = (hand_type, tiebreakers)
         if score > best_score:
             best_score = score
-            best_hand = list(combo)
 
-    return best_score[0], best_score[1], best_hand
+    return best_score[0], best_score[1]
 
 
 def setup_game_state(num_players: int) -> Tuple[List[Player], List[Card]]:
@@ -148,15 +146,13 @@ def apply_blinds(players: List[Player], small_blind: int = 5, big_blind: int = 1
     return pot, small_blind_player, big_blind_player
 
 
-def determine_winners(
-    active_players: List[Player], community_cards: List[Card]
-) -> Dict[Player, Tuple[int, List[int], List[Card]]]:
+def determine_winners(active_players: List[Player], community_cards: List[Card]) -> Dict[Player, Tuple[int, List[int]]]:
     """Determine winners from showdown."""
     player_hands = {}
     for player in active_players:
         all_cards = player.hand + community_cards
-        hand_type, tiebreakers, best_hand = best_hand_from_seven(all_cards)
-        player_hands[player] = (hand_type, tiebreakers, best_hand)
+        hand_type, tiebreakers = best_hand_from_seven(all_cards)
+        player_hands[player] = (hand_type, tiebreakers)
 
     return player_hands
 
@@ -187,7 +183,7 @@ def distribute_winnings(winners: List[Player], pot: int) -> int:
 
 def process_betting_action(
     player: Player,
-    action: str,
+    action: Action,
     amount: int,
     player_bets: Dict[Player, int],
     pot: int,
@@ -199,24 +195,28 @@ def process_betting_action(
 
     Returns: (new_pot, new_current_bet, was_raise)
     """
-    # Convert Action enum to string if needed
-    action_str = action.value if hasattr(action, "value") else action
 
-    if action_str == "fold":
+    if action == Action.FOLD:
         active_players.remove(player)
         return pot, current_bet, False
-    elif action_str == "check":
+    elif action == Action.CHECK:
         return pot, current_bet, False
-    elif action_str == "call":
+    elif action == Action.CALL:
         player_bets[player] += amount
         player.chips -= amount
         pot += amount
+        print(f"   Pot is now {pot} chips")
         return pot, current_bet, False
-    elif action_str in ["bet", "raise"]:
+    elif action == Action.BET:
         player_bets[player] += amount
         player.chips -= amount
         pot += amount
         new_current_bet = player_bets[player]
-        return pot, new_current_bet, True
 
-    return pot, current_bet, False
+        # Only consider it a raise if the new bet is higher than the current bet
+        was_raise = new_current_bet > current_bet
+
+        print(f"   Pot is now {pot} chips")
+        return pot, new_current_bet, was_raise
+    else:
+        raise ValueError(f"Invalid action: {action}")

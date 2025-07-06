@@ -10,7 +10,7 @@ from game import (
     process_betting_action,
     setup_game_state,
 )
-from player_actions import Action, ActionResponse, get_human_action
+from player_actions import Action, ActionResponse, get_action_router
 
 
 def print_betting_phase(phase: str, cards: List[Card] = None):
@@ -30,7 +30,7 @@ def print_betting_phase(phase: str, cards: List[Card] = None):
             print(f"   {hand_to_string(cards)}")
 
 
-def print_showdown_results(player_hands: Dict[Player, Tuple[int, List[int], List[Card]]], community_cards: List[Card]):
+def print_showdown_results(player_hands: Dict[Player, Tuple[int, List[int]]], community_cards: List[Card]):
     """Print showdown results in a formatted table."""
     print("\n" + "=" * 60)
     print("Showdown")
@@ -42,9 +42,8 @@ def print_showdown_results(player_hands: Dict[Player, Tuple[int, List[int], List
     # Sort players by hand strength for better display
     sorted_hands = sorted(player_hands.items(), key=lambda x: (x[1][0], x[1][1]), reverse=True)
 
-    for i, (player, (hand_type, tiebreakers, best_hand)) in enumerate(sorted_hands):
+    for i, (player, (hand_type, tiebreakers)) in enumerate(sorted_hands):
         hole_cards = "  ".join(print_card_visual(card) for card in player.hand)
-        best_cards = "  ".join(print_card_visual(card) for card in best_hand)
         hand_name = HAND_NAMES[hand_type]
 
         rank_indicator = "1st" if i == 0 else "2nd" if i == 1 else "3rd" if i == 2 else "  "
@@ -55,7 +54,6 @@ def print_showdown_results(player_hands: Dict[Player, Tuple[int, List[int], List
             print(f"  {rank_indicator}   {player.name}:")
 
         print(f"      Hole cards: {hole_cards}")
-        print(f"      Best hand:  {best_cards}")
         print(f"      Hand type:  {hand_name}")
         print()
 
@@ -84,17 +82,9 @@ def betting_round(
 
         if to_call >= player.chips:
             # Player is all-in
-
             action_response = ActionResponse(action=Action.CALL, amount=player.chips)
         else:
-            # Get action from human or AI
-            if player.name == "You":
-                action_response = get_human_action(
-                    player=player, current_bet=to_call, player_chips=player.chips, pot=pot
-                )
-            else:
-                action_func = player.action_func
-                action_response = action_func(player=player, current_bet=to_call, player_chips=player.chips)
+            action_response = get_action_router(player, to_call, player.chips)
 
         # Process the action using game logic
         pot, current_bet, was_raise = process_betting_action(
@@ -105,6 +95,7 @@ def betting_round(
         if was_raise:
             for other_player in active_players:
                 if other_player != player and other_player not in players_to_act:
+                    # Add players who haven't matched the new current bet
                     if player_bets[other_player] < current_bet:
                         players_to_act.append(other_player)
 
@@ -236,4 +227,4 @@ def play_round():
 
 
 if __name__ == "__main__":
-    play_round(5)
+    play_round()
