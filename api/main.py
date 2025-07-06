@@ -1,4 +1,5 @@
 import random
+import time
 from enum import Enum
 from itertools import combinations
 from typing import List, Tuple
@@ -349,6 +350,7 @@ def betting_round(
             print(f"💥 {player.name} is ALL-IN with {amount} chips!")
         else:
             action, amount = get_player_action(player, to_call, player.chips, pot)
+            time.sleep(1)
 
         if action == "fold":
             active_players.remove(player)
