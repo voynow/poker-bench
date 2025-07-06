@@ -29,12 +29,22 @@ def get_random_action(
             return ActionResponse(action=Action.RAISE, amount=amount_to_call + 10)
     else:
         if random.random() < 0.75:
-            return ActionResponse(action=Action.CALL, amount=amount_to_call)
+            # If we want to call but don't have enough chips, go all-in
+            call_amount = min(amount_to_call, player_chips)
+            return ActionResponse(action=Action.CALL, amount=call_amount)
         elif random.random() < 0.75:
             return ActionResponse(action=Action.FOLD, amount=0)
         else:
-            total_bet_amount = amount_to_call + 10
-            return ActionResponse(action=Action.RAISE, amount=total_bet_amount)
+            # If we want to raise but don't have enough chips, go all-in
+            total_bet_amount = min(amount_to_call + 10, player_chips)
+            if total_bet_amount > amount_to_call:
+                return ActionResponse(action=Action.RAISE, amount=total_bet_amount)
+            else:
+                # Can't raise, just call or fold
+                if total_bet_amount >= amount_to_call:
+                    return ActionResponse(action=Action.CALL, amount=amount_to_call)
+                else:
+                    return ActionResponse(action=Action.FOLD, amount=0)
 
 
 def get_hand_strength_based_action(
@@ -53,60 +63,7 @@ def get_hand_strength_based_action(
     :param player_chips: The number of chips the player has
     :return: An ActionResponse object with the action and amount
     """
-    from game import evaluate_hand
-
-    # Evaluate hand strength (0-8, where 8 is best)
-    hand_strength, _ = evaluate_hand(player.hand)
-
-    # Calculate hand strength percentage (0.0 to 1.0)
-    strength_ratio = hand_strength / 8.0
-
-    # Very weak hands (0-2): mostly fold, sometimes check/call
-    if hand_strength <= 2:
-        if amount_to_call == 0:
-            return ActionResponse(action=Action.CHECK, amount=0)
-        elif amount_to_call <= 5:  # Small bet
-            if random.random() < 0.3:
-                return ActionResponse(action=Action.CALL, amount=amount_to_call)
-            else:
-                return ActionResponse(action=Action.FOLD, amount=0)
-        else:
-            return ActionResponse(action=Action.FOLD, amount=0)
-
-    # Moderate hands (3-5): balanced play
-    elif hand_strength <= 5:
-        if amount_to_call == 0:
-            if random.random() < 0.7:
-                return ActionResponse(action=Action.CHECK, amount=0)
-            else:
-                bet_amount = int(5 + (strength_ratio * 10))
-                return ActionResponse(action=Action.RAISE, amount=bet_amount)
-        else:
-            if amount_to_call <= 15:
-                if random.random() < 0.7:
-                    return ActionResponse(action=Action.CALL, amount=amount_to_call)
-                else:
-                    return ActionResponse(action=Action.FOLD, amount=0)
-            else:
-                if random.random() < 0.3:
-                    return ActionResponse(action=Action.CALL, amount=amount_to_call)
-                else:
-                    return ActionResponse(action=Action.FOLD, amount=0)
-
-    # Strong hands (6-8): aggressive play
-    else:
-        if amount_to_call == 0:
-            if random.random() < 0.3:
-                return ActionResponse(action=Action.CHECK, amount=0)
-            else:
-                bet_amount = int(10 + (strength_ratio * 20))
-                return ActionResponse(action=Action.RAISE, amount=bet_amount)
-        else:
-            if random.random() < 0.8:
-                return ActionResponse(action=Action.CALL, amount=amount_to_call)
-            else:
-                raise_amount = amount_to_call + int(10 + (strength_ratio * 15))
-                return ActionResponse(action=Action.RAISE, amount=raise_amount)
+    pass
 
 
 def get_human_action(player: Player, amount_to_call: int, player_chips: int) -> ActionResponse:
@@ -138,8 +95,10 @@ def get_human_action(player: Player, amount_to_call: int, player_chips: int) -> 
 
             if choice == "c":
                 if amount_to_call > player_chips:
-                    print(f"You don't have enough chips to call! You have {player_chips}, need {amount_to_call}")
-                    continue
+                    print(f"You don't have enough chips to call the full amount!")
+                    print(f"You have {player_chips} chips, need {amount_to_call}")
+                    print(f"Going all-in with {player_chips} chips")
+                    return ActionResponse(action=Action.CALL, amount=player_chips)
                 return ActionResponse(action=Action.CALL, amount=amount_to_call)
             elif choice == "f":
                 return ActionResponse(action=Action.FOLD, amount=0)
@@ -147,6 +106,7 @@ def get_human_action(player: Player, amount_to_call: int, player_chips: int) -> 
                 min_raise = amount_to_call + 1
                 if min_raise > player_chips:
                     print(f"You don't have enough chips to raise! You have {player_chips}, need at least {min_raise}")
+                    print("You can only call or fold.")
                     continue
 
                 while True:
@@ -212,5 +172,4 @@ def get_action_router(player: Player, amount_to_call: int, player_chips: int) ->
     if response.amount > 0:
         display_str += f" {response.amount} chips"
     print(display_str)
-    time.sleep(0.5)
     return response

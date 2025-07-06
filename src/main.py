@@ -1,5 +1,5 @@
-from typing import Dict, List, Tuple
 import random
+from typing import Dict, List, Tuple
 
 from constants_and_types import HAND_NAMES, NUM_OPPONENTS, Card, Player, hand_to_string
 from game import (
@@ -62,6 +62,11 @@ def print_showdown_results(player_hands: Dict[Player, Tuple[int, List[int]]], co
     print("=" * 60)
 
 
+def all_players_all_in(active_players: List[Player]) -> bool:
+    """Check if all active players are all-in (have 0 chips)."""
+    return all(player.chips == 0 for player in active_players)
+
+
 def betting_round(
     active_players: List[Player],
     pot: int,
@@ -69,6 +74,12 @@ def betting_round(
     blinds: Dict[Player, int] = None,
 ) -> Tuple[int, int, List[Player]]:
     """Handle a betting round with both human and AI players."""
+
+    # Skip betting if all players are all-in
+    if all_players_all_in(active_players):
+        print("\nAll players are all-in - skipping betting round")
+        return pot, current_bet, active_players
+
     players_to_act = list(active_players)
     player_bets = blinds.copy() if blinds else {player: 0 for player in active_players}
 
@@ -82,11 +93,7 @@ def betting_round(
 
         to_call = current_bet - player_bets[player]
 
-        if to_call >= player.chips:
-            # Player is all-in
-            action_response = ActionResponse(action=Action.CALL, amount=player.chips)
-        else:
-            action_response = get_action_router(player, to_call, player.chips)
+        action_response = get_action_router(player, to_call, player.chips)
 
         # Process the action using game logic
         pot, current_bet, was_raise = process_betting_action(
@@ -103,6 +110,11 @@ def betting_round(
 
         # Check if only one player remains
         if len(active_players) == 1:
+            break
+
+        # Check if all remaining players are all-in
+        if all_players_all_in(active_players):
+            print("\nAll remaining players are all-in - ending betting round")
             break
 
     remaining_players = len(active_players)
@@ -153,29 +165,32 @@ def play_round(players: List[Player]):
         for _ in range(3):
             community_cards.append(deck.pop())
         print_betting_phase("Flop", community_cards)
-        pot, current_bet, active_players = betting_round(
-            active_players=active_players, pot=pot, current_bet=current_bet
-        )
-        current_bet = 0
+        if not all_players_all_in(active_players):
+            pot, current_bet, active_players = betting_round(
+                active_players=active_players, pot=pot, current_bet=current_bet
+            )
+            current_bet = 0
 
     # Deal turn (1 community card)
     if len(active_players) > 1:
         deck.pop()  # Burn card
         community_cards.append(deck.pop())
         print_betting_phase("Turn", community_cards)
-        pot, current_bet, active_players = betting_round(
-            active_players=active_players, pot=pot, current_bet=current_bet
-        )
-        current_bet = 0
+        if not all_players_all_in(active_players):
+            pot, current_bet, active_players = betting_round(
+                active_players=active_players, pot=pot, current_bet=current_bet
+            )
+            current_bet = 0
 
     # Deal river (1 community card)
     if len(active_players) > 1:
         deck.pop()  # Burn card
         community_cards.append(deck.pop())
         print_betting_phase("River", community_cards)
-        pot, current_bet, active_players = betting_round(
-            active_players=active_players, pot=pot, current_bet=current_bet
-        )
+        if not all_players_all_in(active_players):
+            pot, current_bet, active_players = betting_round(
+                active_players=active_players, pot=pot, current_bet=current_bet
+            )
 
     # Determine winner(s)
     if len(active_players) == 1:
@@ -225,6 +240,30 @@ def play_round(players: List[Player]):
     print("=" * 60)
 
 
+def eliminate_broke_players(players: List[Player]) -> List[Player]:
+    """
+    Remove players with 0 chips from the game.
+
+    :param players: List of all players
+    :return: List of players with chips > 0
+    """
+    eliminated_players = [p for p in players if p.chips <= 0]
+    remaining_players = [p for p in players if p.chips > 0]
+
+    if eliminated_players:
+        print("\n" + "=" * 60)
+        print("PLAYER ELIMINATIONS")
+        print("=" * 60)
+        for player in eliminated_players:
+            if player.name == "You":
+                print(f"💀 {player.name} are eliminated! (0 chips)")
+            else:
+                print(f"💀 {player.name} is eliminated! (0 chips)")
+        print("=" * 60)
+
+    return remaining_players
+
+
 def main():
     """
     Play N rounds of Texas Hold'em
@@ -233,16 +272,52 @@ def main():
     round_count = 0
     while True:
         play_round(players)
+
+        # Eliminate players with 0 chips
+        players = eliminate_broke_players(players)
+
+        # Check if enough players remain
+        if len(players) < 2:
+            print("\n" + "=" * 60)
+            print("GAME OVER")
+            print("=" * 60)
+            if len(players) == 1:
+                winner = players[0]
+                if winner.name == "You":
+                    print("🎉 Congratulations! You are the last player standing!")
+                    print(f"🏆 You won the entire tournament with {winner.chips} chips!")
+                else:
+                    print(f"🎉 {winner.name} wins the tournament!")
+                    print(f"🏆 {winner.name} is the last player standing with {winner.chips} chips!")
+            else:
+                print("🚫 No players remain! Game over.")
+            print("=" * 60)
+            break
+
+        # Check if human player is still in the game
+        user_still_playing = any(p.name == "You" for p in players)
+        if not user_still_playing:
+            print("\n" + "=" * 60)
+            print("GAME OVER")
+            print("=" * 60)
+            print("💀 You have been eliminated!")
+            print("🎮 The remaining AI players will continue without you.")
+            print("=" * 60)
+            break
+
         play_again = input("Play again? (Y/n): ")
         if play_again.lower() in ["n", "no"]:
             break
         round_count += 1
 
-    user = next(p for p in players if p.name == "You")
-    if user.chips > 1000:
-        print(f"Thanks for playing! You played {round_count} rounds and won {user.chips - 1000} chips")
+    user = next((p for p in players if p.name == "You"), None)
+    if user:
+        if user.chips > 1000:
+            print(f"Thanks for playing! You played {round_count} rounds and won {user.chips - 1000} chips")
+        else:
+            print(f"Thanks for playing! You played {round_count} rounds and lost {1000 - user.chips} chips")
     else:
-        print(f"Thanks for playing! You played {round_count} rounds and lost {1000 - user.chips} chips")
+        print(f"Thanks for playing! You played {round_count} rounds before being eliminated.")
 
 
 if __name__ == "__main__":

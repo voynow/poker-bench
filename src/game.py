@@ -198,6 +198,30 @@ def distribute_winnings(winners: List[Player], pot: int) -> int:
         return split_amount
 
 
+def calculate_max_callable_amount(
+    raising_player: Player, player_bets: Dict[Player, int], active_players: List[Player]
+) -> int:
+    """Calculate the maximum amount that can be called by all players.
+
+    This is based on the smallest stack - the pot should never include more
+    than what the shortest-stacked opponent can call.
+    """
+    if len(active_players) <= 1:
+        return player_bets[raising_player] + raising_player.chips
+
+    min_callable = float("inf")
+
+    for player in active_players:
+        if player == raising_player:
+            continue
+
+        # How much this player can contribute total (current bet + remaining chips)
+        max_contribution = player_bets[player] + player.chips
+        min_callable = min(min_callable, max_contribution)
+
+    return min_callable
+
+
 def process_betting_action(
     player: Player,
     action: Action,
@@ -225,12 +249,23 @@ def process_betting_action(
         print(f"   Pot is now {pot} chips")
         return pot, current_bet, False
     elif action == Action.RAISE:
-        player_bets[player] += amount
-        player.chips -= amount
-        pot += amount
-        new_current_bet = player_bets[player]
+        # Calculate maximum callable amount by other players
+        max_callable = calculate_max_callable_amount(player, player_bets, active_players)
 
-        # Only consider it a raise if the new bet is higher than the current bet
+        # Determine the effective raise amount (capped by what others can call AND player's chips)
+        proposed_total_bet = player_bets[player] + amount
+        max_player_can_bet = player_bets[player] + player.chips
+        effective_total_bet = min(proposed_total_bet, max_callable, max_player_can_bet)
+
+        # Calculate actual amount to take from player's chips
+        actual_amount = effective_total_bet - player_bets[player]
+
+        # Update player's state (only subtract what we're actually using)
+        player_bets[player] = effective_total_bet
+        player.chips -= actual_amount
+        pot += actual_amount
+
+        new_current_bet = effective_total_bet
         was_raise = new_current_bet > current_bet
 
         print(f"   Pot is now {pot} chips")
