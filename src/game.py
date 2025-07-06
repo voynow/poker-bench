@@ -107,26 +107,43 @@ def best_hand_from_seven(cards: List[Card]) -> Tuple[int, List[int]]:
     return best_score[0], best_score[1]
 
 
-def setup_game_state(num_players: int) -> Tuple[List[Player], List[Card]]:
-    """Setup initial game state with players and shuffled deck."""
+def setup_players(num_players: int) -> List[Player]:
+    """
+    Setup players with self + num_players - 1 AI players
 
+    :param num_players: The number of players to setup
+    :return: A list of players
+    """
     players: List[Player] = []
     players.append(Player(name="You", chips=1000, hand=[], action_func=get_human_action))
 
-    # Create AI opponents
     for i in range(num_players - 1):
         ai_player = Player(name=f"Player {i + 1}", chips=1000, hand=[], action_func=get_random_action)
         players.append(ai_player)
 
+    return players
+
+
+def setup_round(players: List[Player]) -> Tuple[List[Player], List[Card]]:
+    """
+    Setup initial game state with players (modified in place) and shuffled deck
+
+    :param players: The players to setup
+    :return: A shuffled deck
+    """
     deck = create_deck()
     random.shuffle(deck)
+
+    # ensure each player has an empty hand
+    for player in players:
+        player.hand = []
 
     # Deal hole cards
     for _ in range(2):
         for player in players:
             player.hand.append(deck.pop())
 
-    return players, deck
+    return deck
 
 
 def apply_blinds(players: List[Player], small_blind: int = 5, big_blind: int = 10) -> Tuple[int, Player, Player]:

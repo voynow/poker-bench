@@ -8,7 +8,8 @@ from game import (
     get_winners_from_hands,
     print_card_visual,
     process_betting_action,
-    setup_game_state,
+    setup_players,
+    setup_round,
 )
 from player_actions import Action, ActionResponse, get_action_router
 
@@ -111,12 +112,9 @@ def betting_round(
     return pot, current_bet, active_players
 
 
-def play_round():
+def play_round(players: List[Player]):
     """Play a single round of Texas Hold'em."""
-    print(f"Starting a new hand against {NUM_OPPONENTS} AI opponents\n")
-
-    # Setup game state
-    players, deck = setup_game_state(NUM_OPPONENTS + 1)
+    deck = setup_round(players)
 
     # Apply blinds
     pot, small_blind_player, big_blind_player = apply_blinds(players)
@@ -226,5 +224,25 @@ def play_round():
     print("=" * 60)
 
 
+def main():
+    """
+    Play N rounds of Texas Hold'em
+    """
+    players = setup_players(NUM_OPPONENTS + 1)
+    round_count = 0
+    while True:
+        play_round(players)
+        play_again = input("Play again? (Y/n): ")
+        if play_again.lower() in ["n", "no"]:
+            break
+        round_count += 1
+
+    user = next(p for p in players if p.name == "You")
+    if user.chips > 1000:
+        print(f"Thanks for playing! You played {round_count} rounds and won {user.chips - 1000} chips")
+    else:
+        print(f"Thanks for playing! You played {round_count} rounds and lost {1000 - user.chips} chips")
+
+
 if __name__ == "__main__":
-    play_round()
+    main()
