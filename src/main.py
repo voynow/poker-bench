@@ -1,4 +1,5 @@
 from typing import Dict, List, Tuple
+import random
 
 from constants_and_types import HAND_NAMES, NUM_OPPONENTS, Card, Player, hand_to_string
 from game import (

@@ -26,9 +26,9 @@ HAND_NAMES = [
 
 class Action(StrEnum):
     CHECK = "check"
-    BET = "bet"
     CALL = "call"
     FOLD = "fold"
+    RAISE = "raise"
 
 
 class ActionResponse(BaseModel):

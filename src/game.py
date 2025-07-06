@@ -224,7 +224,7 @@ def process_betting_action(
         pot += amount
         print(f"   Pot is now {pot} chips")
         return pot, current_bet, False
-    elif action == Action.BET:
+    elif action == Action.RAISE:
         player_bets[player] += amount
         player.chips -= amount
         pot += amount
