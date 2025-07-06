@@ -1,20 +1,16 @@
-import time
 from typing import Dict, List, Tuple
 
-from ai_opponents import get_ai_action
+from constants_and_types import HAND_NAMES, NUM_OPPONENTS, Card, Player, hand_to_string
 from game import (
-    HAND_NAMES,
-    Card,
-    Player,
     apply_blinds,
     determine_winners,
     distribute_winnings,
     get_winners_from_hands,
-    hand_to_string,
     print_card_visual,
     process_betting_action,
     setup_game_state,
 )
+from player_actions import Action, ActionResponse, get_human_action
 
 
 def print_betting_phase(phase: str, cards: List[Card] = None):
@@ -66,74 +62,6 @@ def print_showdown_results(player_hands: Dict[Player, Tuple[int, List[int], List
     print("=" * 60)
 
 
-def get_human_action(player: Player, current_bet: int, player_chips: int, pot: int) -> Tuple[str, int]:
-    """Get human player action through console input."""
-    print("\nYour Turn:")
-    print(f"   Current pot: {pot} chips")
-    print(f"   Your chips: {player_chips}")
-    print(f"   Your cards: {hand_to_string(player.hand)}")
-
-    if current_bet > 0:
-        print(f"   You must call {current_bet} chips to stay in the hand")
-    else:
-        print("   No bet to call - you can check for free")
-
-    while True:
-        if current_bet == 0:
-            print("\nAvailable actions:")
-            print("   [c] CHECK  - Stay in the hand without betting")
-            print("   [b] BET    - Make the first bet this round")
-            print("   [f] FOLD   - Give up your hand and exit")
-
-            action = input("\nWhat would you like to do? [c/b/f]: ").lower().strip()
-
-            if action in ["c", "check"]:
-                return "check", 0
-            elif action in ["b", "bet"]:
-                try:
-                    amount = int(input(f"   Enter bet amount (1-{player_chips}): "))
-                    if 0 < amount <= player_chips:
-                        print(f"You bet {amount} chips")
-                        return "bet", amount
-                    else:
-                        print(f"Invalid amount. Must be between 1 and {player_chips}")
-                except ValueError:
-                    print("Please enter a valid number")
-            elif action in ["f", "fold"]:
-                print("You chose to FOLD (give up your hand)")
-                return "fold", 0
-            else:
-                print("Invalid choice. Please enter 'c', 'b', or 'f'")
-        else:
-            to_call = current_bet
-            print("\nAvailable actions:")
-            print(f"   [c] CALL   - Match the current bet of {to_call} chips")
-            print(f"   [r] RAISE  - Increase the bet above {current_bet} chips")
-            print("   [f] FOLD   - Give up your hand and exit")
-
-            action = input("\nWhat would you like to do? [c/r/f]: ").lower().strip()
-
-            if action in ["c", "call"]:
-                print(f"You chose to CALL {to_call} chips")
-                return "call", to_call
-            elif action in ["r", "raise"]:
-                print(f"You chose to RAISE. Current bet is {current_bet}")
-                try:
-                    amount = int(input(f"   Enter your total bet (minimum {current_bet + 1}): "))
-                    if amount > current_bet and amount <= player_chips:
-                        print(f"You raise to {amount} chips (raising by {amount - current_bet})")
-                        return "raise", amount
-                    else:
-                        print(f"Invalid raise. Must be between {current_bet + 1} and {player_chips}")
-                except ValueError:
-                    print("Please enter a valid number")
-            elif action in ["f", "fold"]:
-                print("You chose to FOLD (give up your hand)")
-                return "fold", 0
-            else:
-                print("Invalid choice. Please enter 'c', 'r', or 'f'")
-
-
 def betting_round(
     active_players: List[Player],
     pot: int,
@@ -156,20 +84,21 @@ def betting_round(
 
         if to_call >= player.chips:
             # Player is all-in
-            action, amount = "call", player.chips
+
+            action_response = ActionResponse(action=Action.CALL, amount=player.chips)
         else:
             # Get action from human or AI
             if player.name == "You":
-                action, amount = get_human_action(
+                action_response = get_human_action(
                     player=player, current_bet=to_call, player_chips=player.chips, pot=pot
                 )
             else:
-                action, amount = get_ai_action(player=player, current_bet=to_call, player_chips=player.chips)
-            time.sleep(1)
+                action_func = player.action_func
+                action_response = action_func(player=player, current_bet=to_call, player_chips=player.chips)
 
         # Process the action using game logic
         pot, current_bet, was_raise = process_betting_action(
-            player, action, amount, player_bets, pot, current_bet, active_players
+            player, action_response.action, action_response.amount, player_bets, pot, current_bet, active_players
         )
 
         # If there was a raise, add other players back to act
@@ -191,12 +120,12 @@ def betting_round(
     return pot, current_bet, active_players
 
 
-def play_round(num_opponents: int):
+def play_round():
     """Play a single round of Texas Hold'em."""
-    print(f"Starting a new hand against {num_opponents} AI opponents\n")
+    print(f"Starting a new hand against {NUM_OPPONENTS} AI opponents\n")
 
     # Setup game state
-    players, deck = setup_game_state(num_opponents + 1)
+    players, deck = setup_game_state(NUM_OPPONENTS + 1)
 
     # Apply blinds
     pot, small_blind_player, big_blind_player = apply_blinds(players)

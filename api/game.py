@@ -1,48 +1,11 @@
+from __future__ import annotations
+
 import random
-from enum import Enum
 from itertools import combinations
 from typing import Dict, List, Tuple
 
-from pydantic import BaseModel
-
-
-class Suit(Enum):
-    """Represent the four suits in a standard deck."""
-
-    SPADES = "♠"
-    HEARTS = "♥"
-    DIAMONDS = "♦"
-    CLUBS = "♣"
-
-
-Card = Tuple[int, Suit]
-Hand = List[Card]
-
-
-class Player(BaseModel):
-    name: str
-    chips: int
-    hand: Hand
-
-    def __hash__(self):
-        """Make Player hashable so it can be used in sets and as dict keys."""
-        return hash(self.name)
-
-
-# Constants
-RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
-RANK_VALUES = {rank: i + 2 for i, rank in enumerate(RANKS)}
-HAND_NAMES = [
-    "High Card",
-    "Pair",
-    "Two Pair",
-    "Three of a Kind",
-    "Straight",
-    "Flush",
-    "Full House",
-    "Four of a Kind",
-    "Straight Flush",
-]
+from constants_and_types import RANKS, Card, Hand, Player, Suit
+from player_actions import get_human_action, get_random_action
 
 
 def create_deck() -> List[Card]:
@@ -53,11 +16,6 @@ def create_deck() -> List[Card]:
 def deal_cards(deck: List[Card], num_cards: int) -> List[Card]:
     """Deal num_cards from the deck."""
     return [deck.pop() for _ in range(num_cards)]
-
-
-def hand_to_string(hand: Hand) -> str:
-    """Convert hand to readable string."""
-    return " ".join(f"{RANKS[rank - 2]}{suit.value}" for rank, suit in hand)
 
 
 def print_card_visual(card: Card) -> str:
@@ -153,12 +111,13 @@ def best_hand_from_seven(cards: List[Card]) -> Tuple[int, List[int], List[Card]]
 
 def setup_game_state(num_players: int) -> Tuple[List[Player], List[Card]]:
     """Setup initial game state with players and shuffled deck."""
+
     players: List[Player] = []
-    players.append(Player(name="You", chips=1000, hand=[]))
+    players.append(Player(name="You", chips=1000, hand=[], action_func=get_human_action))
 
     # Create AI opponents
     for i in range(num_players - 1):
-        ai_player = Player(name=f"Player {i + 1}", chips=1000, hand=[])
+        ai_player = Player(name=f"Player {i + 1}", chips=1000, hand=[], action_func=get_random_action)
         players.append(ai_player)
 
     deck = create_deck()
@@ -240,17 +199,20 @@ def process_betting_action(
 
     Returns: (new_pot, new_current_bet, was_raise)
     """
-    if action == "fold":
+    # Convert Action enum to string if needed
+    action_str = action.value if hasattr(action, "value") else action
+
+    if action_str == "fold":
         active_players.remove(player)
         return pot, current_bet, False
-    elif action == "check":
+    elif action_str == "check":
         return pot, current_bet, False
-    elif action == "call":
+    elif action_str == "call":
         player_bets[player] += amount
         player.chips -= amount
         pot += amount
         return pot, current_bet, False
-    elif action in ["bet", "raise"]:
+    elif action_str in ["bet", "raise"]:
         player_bets[player] += amount
         player.chips -= amount
         pot += amount
