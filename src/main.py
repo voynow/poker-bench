@@ -1,6 +1,8 @@
 import asyncio
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Counter, Dict, List, Optional, Tuple
+
+from tqdm import tqdm
 
 from constants_and_types import NUM_OPPONENTS, BettingRoundResult, GameResult, Player
 from game import (
@@ -11,7 +13,7 @@ from game import (
     process_betting_action,
     setup_round,
 )
-from player_actions import get_hand_strength_based_action, get_placeholder_async_action, get_random_action
+from player_actions import get_check_call_action, get_hand_strength_based_action, get_random_action
 
 
 def all_players_all_in(active_players: List[Player]) -> bool:
@@ -145,21 +147,22 @@ def eliminate_players(players: List[Player]) -> Tuple[List[Player], Optional[Lis
 
 def setup_players() -> List[Player]:
     """
-    Setup players: 1 strategic player, 1 placeholder player, and the rest random players
+    Setup players of varying player archetypes
 
     :param num_players: The number of players to setup
     :return: A list of players
     """
     players: List[Player] = []
 
-    for i in range(NUM_OPPONENTS - 2):
-        action_func = get_random_action
-        name = f"Random {i + 1}"
-        player = Player(name=name, chips=1000, hand=[], action_func=action_func)
-        players.append(player)
+    player_archetypes = [get_hand_strength_based_action, get_check_call_action, get_random_action]
+    player_archetypes_counts = {func: 1 for func in player_archetypes}
 
-    players.append(Player(name="Strategic", chips=1000, hand=[], action_func=get_hand_strength_based_action))
-    players.append(Player(name="Placeholder", chips=1000, hand=[], action_func=get_placeholder_async_action))
+    while len(players) < NUM_OPPONENTS:
+        for func in player_archetypes:
+            name = f"{func.__name__},{player_archetypes_counts[func]}"
+            players.append(Player(name=name, chips=1000, hand=[], action_func=func))
+            player_archetypes_counts[func] += 1
+
     return players
 
 
@@ -191,38 +194,59 @@ async def collect_game_result(max_rounds: int) -> GameResult:
     )
 
 
+async def run_games(n_games: int, max_rounds: int) -> List[GameResult]:
+    """
+    Run a number of poker games and return the results.
+
+    :param n_games: The number of games to run
+    :param max_rounds: The maximum number of rounds to play
+    :return: A list of GameResult objects
+    """
+    semaphore = asyncio.Semaphore(100)
+    pbar = tqdm(total=n_games, desc="Running poker simulations", unit="games")
+
+    async def run_game():
+        async with semaphore:
+            result = await collect_game_result(max_rounds)
+            pbar.update(1)
+            return result
+
+    # Run all games and collect results
+    game_results = await asyncio.gather(*[run_game() for _ in range(n_games)])
+    pbar.close()
+
+    return game_results
+
+
 async def main():
     start_time = time.time()
-    n_games = 100
-    max_rounds = 25
+    n_games = 2500
+    max_rounds = 5
 
-    game_tasks = [collect_game_result(max_rounds) for _ in range(n_games)]
-    game_results = await asyncio.gather(*game_tasks)
+    game_results = await run_games(n_games, max_rounds)
 
+    # Process results
     results = {
-        "winning_strategy": [],
-        "rounds_played": [],
-        "final_rankings": [],
-        "players_eliminated": [],
+        "winning_strategy": [r.winner for r in game_results],
+        "rounds_played": [r.rounds_played for r in game_results],
+        "final_rankings": [r.final_rankings for r in game_results],
+        "players_eliminated": [r.eliminated_players for r in game_results],
     }
-
-    for game_result in game_results:
-        results["winning_strategy"].append(game_result.winner)
-        results["rounds_played"].append(game_result.rounds_played)
-        results["final_rankings"].append(game_result.final_rankings)
-        results["players_eliminated"].append(game_result.eliminated_players)
 
     elapsed_time = time.time() - start_time
     minutes = int(elapsed_time // 60)
     seconds = int(elapsed_time % 60)
     print(f"Done in {minutes}m {seconds}s")
 
-    strategic_wins = results["winning_strategy"].count("Strategic")
-    placeholder_wins = results["winning_strategy"].count("Placeholder")
-    random_wins = len(results["winning_strategy"]) - strategic_wins - placeholder_wins
-    print(f"Strategic player won {strategic_wins / n_games * 100:.2f}% of games")
-    print(f"Placeholder player won {placeholder_wins / n_games * 100:.2f}% of games")
-    print(f"Random player won {random_wins / n_games * 100:.2f}% of games")
+    winning_strategies = [res.split(",")[0] for res in results["winning_strategy"]]
+    strategy_counts = Counter(winning_strategies)
+    total_games = len(winning_strategies)
+
+    print("\nWinning Strategy Results:")
+    print("-" * 40)
+    for strategy, count in strategy_counts.most_common():
+        percentage = (count / total_games) * 100
+        print(f"{strategy:<30} {count:>3} ({percentage:>5.1f}%)")
 
 
 if __name__ == "__main__":
