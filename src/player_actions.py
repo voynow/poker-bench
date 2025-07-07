@@ -147,6 +147,20 @@ async def get_hand_strength_based_action(
             return ActionResponse(action=Action.FOLD, amount=0)
 
 
+async def get_check_call_action(
+    player: Player,
+    amount_to_call: int,
+    player_chips: int,
+) -> ActionResponse:
+    """
+    This type of player will always either check or call.
+    """
+    if amount_to_call == 0:
+        return ActionResponse(action=Action.CHECK, amount=0)
+    else:
+        return ActionResponse(action=Action.CALL, amount=amount_to_call)
+
+
 async def get_placeholder_async_action(
     player: Player,
     amount_to_call: int,
