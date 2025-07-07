@@ -1,3 +1,5 @@
+import asyncio
+import time
 from typing import Dict, List, Optional, Tuple
 
 from constants_and_types import NUM_OPPONENTS, Player
@@ -9,7 +11,7 @@ from game import (
     process_betting_action,
     setup_round,
 )
-from player_actions import get_hand_strength_based_action, get_random_action
+from player_actions import get_hand_strength_based_action, get_placeholder_async_action, get_random_action
 
 
 def all_players_all_in(active_players: List[Player]) -> bool:
@@ -17,7 +19,7 @@ def all_players_all_in(active_players: List[Player]) -> bool:
     return all(player.chips == 0 for player in active_players)
 
 
-def betting_round(
+async def betting_round(
     active_players: List[Player],
     pot: int,
     current_bet: int,
@@ -41,7 +43,7 @@ def betting_round(
         to_call = current_bet - player_bets[player]
 
         action_func = player.action_func
-        action_response = action_func(player, to_call, player.chips)
+        action_response = await action_func(player, to_call, player.chips)
 
         # Process the action using game logic
         pot, current_bet, was_raise = process_betting_action(
@@ -67,7 +69,7 @@ def betting_round(
     return pot, current_bet, active_players
 
 
-def play_round(players: List[Player]):
+async def play_round(players: List[Player]):
     """Play a single round of Texas Hold'em."""
     deck = setup_round(players)
 
@@ -85,7 +87,7 @@ def play_round(players: List[Player]):
         blind_bets[small_blind_player] = small_blind
         blind_bets[big_blind_player] = big_blind
 
-        pot, current_bet, active_players = betting_round(
+        pot, current_bet, active_players = await betting_round(
             active_players=active_players, pot=pot, current_bet=current_bet, blinds=blind_bets
         )
         current_bet = 0
@@ -102,7 +104,7 @@ def play_round(players: List[Player]):
         for _ in range(3):
             community_cards.append(deck.pop())
         if not all_players_all_in(active_players):
-            pot, current_bet, active_players = betting_round(
+            pot, current_bet, active_players = await betting_round(
                 active_players=active_players, pot=pot, current_bet=current_bet
             )
             current_bet = 0
@@ -112,7 +114,7 @@ def play_round(players: List[Player]):
         deck.pop()  # Burn card
         community_cards.append(deck.pop())
         if not all_players_all_in(active_players):
-            pot, current_bet, active_players = betting_round(
+            pot, current_bet, active_players = await betting_round(
                 active_players=active_players, pot=pot, current_bet=current_bet
             )
             current_bet = 0
@@ -122,7 +124,7 @@ def play_round(players: List[Player]):
         deck.pop()  # Burn card
         community_cards.append(deck.pop())
         if not all_players_all_in(active_players):
-            pot, current_bet, active_players = betting_round(
+            pot, current_bet, active_players = await betting_round(
                 active_players=active_players, pot=pot, current_bet=current_bet
             )
 
@@ -146,27 +148,54 @@ def eliminate_players(players: List[Player]) -> Tuple[List[Player], Optional[Lis
 
 def setup_players() -> List[Player]:
     """
-    Setup players: 1 strategic player and the rest random players
+    Setup players: 1 strategic player, 1 placeholder player, and the rest random players
 
     :param num_players: The number of players to setup
     :return: A list of players
     """
     players: List[Player] = []
 
-    for i in range(NUM_OPPONENTS - 1):
+    for i in range(NUM_OPPONENTS - 2):
         action_func = get_random_action
         name = f"Random {i + 1}"
         player = Player(name=name, chips=1000, hand=[], action_func=action_func)
         players.append(player)
 
     players.append(Player(name="Strategic", chips=1000, hand=[], action_func=get_hand_strength_based_action))
-
+    players.append(Player(name="Placeholder", chips=1000, hand=[], action_func=get_placeholder_async_action))
     return players
 
 
-def main():
-    n_games = 100
-    max_rounds = 250
+async def collect_game_results(max_rounds: int) -> Tuple[str, int, List[Player], List[Player]]:
+    """
+    Play a single game and return its results.
+
+    :param max_rounds: The maximum number of rounds to play
+    :return: A tuple containing the winner, the number of rounds played, the final rankings, and the players eliminated
+    """
+    players = setup_players()
+
+    round_count = 0
+    eliminated_players = []
+    while round_count < max_rounds and len(players) >= 2:
+        await play_round(players)
+        players, eliminated_this_round = eliminate_players(players)
+        eliminated_players.extend(eliminated_this_round)
+        round_count += 1
+
+    winner = sorted(players, key=lambda p: p.chips, reverse=True)[0].name
+    final_rankings = sorted(players, key=lambda p: p.chips, reverse=True)
+
+    return winner, round_count, final_rankings, eliminated_players
+
+
+async def main():
+    start_time = time.time()
+    n_games = 250
+    max_rounds = 50
+
+    game_tasks = [collect_game_results(max_rounds) for _ in range(n_games)]
+    game_results = await asyncio.gather(*game_tasks)
 
     results = {
         "winning_strategy": [],
@@ -174,26 +203,25 @@ def main():
         "final_rankings": [],
         "players_eliminated": [],
     }
-    for _ in range(n_games):
-        players = setup_players()
 
-        round_count = 0
-        eliminated_players = []
-        while round_count < max_rounds and len(players) >= 2:
-            play_round(players)
-            players, eliminated_this_round = eliminate_players(players)
-            eliminated_players.extend(eliminated_this_round)  # Add newly eliminated players
-            round_count += 1
+    for winner, rounds, rankings, eliminated in game_results:
+        results["winning_strategy"].append(winner)
+        results["rounds_played"].append(rounds)
+        results["final_rankings"].append(rankings)
+        results["players_eliminated"].append(eliminated)
 
-        results["winning_strategy"].append(sorted(players, key=lambda p: p.chips, reverse=True)[0].name)
-        results["rounds_played"].append(round_count)
-        results["final_rankings"].append(sorted(players, key=lambda p: p.chips, reverse=True))
-        results["players_eliminated"].append(eliminated_players)
-
+    end_time = time.time()
+    print(f"Done in {end_time - start_time} seconds")
 
     # what percentage of games did the strategic player win?
     print(f"Strategic player won {results['winning_strategy'].count('Strategic') / n_games * 100}% of games")
 
+    # what percentage of games did the placeholder player win?
+    print(f"Placeholder player won {results['winning_strategy'].count('Placeholder') / n_games * 100}% of games")
+
+    # what percentage of games did the random player win?
+    print(f"Random player won {len(results['winning_strategy']) - results['winning_strategy'].count('Strategic') - results['winning_strategy'].count('Placeholder') / n_games * 100}% of games")
+
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

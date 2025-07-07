@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import asyncio
 import random
 
 from constants_and_types import Action, ActionResponse, Player
 from game import evaluate_hand
 
 
-def get_random_action(
+async def get_random_action(
     player: Player,
     amount_to_call: int,
     player_chips: int,
@@ -47,7 +48,7 @@ def get_random_action(
                     return ActionResponse(action=Action.FOLD, amount=0)
 
 
-def get_hand_strength_based_action(
+async def get_hand_strength_based_action(
     player: Player,
     amount_to_call: int,
     player_chips: int,
@@ -144,3 +145,16 @@ def get_hand_strength_based_action(
             return ActionResponse(action=Action.CALL, amount=call_amount)
         else:
             return ActionResponse(action=Action.FOLD, amount=0)
+
+
+async def get_placeholder_async_action(
+    player: Player,
+    amount_to_call: int,
+    player_chips: int,
+) -> ActionResponse:
+    # can we do an async sleep to simulate an asyncronous network call?
+    await asyncio.sleep(1)
+    if amount_to_call == 0:
+        return ActionResponse(action=Action.CHECK, amount=0)
+    else:
+        return ActionResponse(action=Action.CALL, amount=amount_to_call)
