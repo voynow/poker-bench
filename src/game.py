@@ -5,7 +5,6 @@ from itertools import combinations
 from typing import Dict, List, Tuple
 
 from constants_and_types import RANKS, Action, Card, Hand, Player, Suit
-from player_actions import get_human_action, get_random_action
 
 
 def create_deck() -> List[Card]:
@@ -107,30 +106,8 @@ def best_hand_from_seven(cards: List[Card]) -> Tuple[int, List[int]]:
     return best_score[0], best_score[1]
 
 
-def setup_players(num_players: int) -> List[Player]:
-    """
-    Setup players with self + num_players - 1 AI players
-
-    :param num_players: The number of players to setup
-    :return: A list of players
-    """
-    players: List[Player] = []
-    players.append(Player(name="You", chips=1000, hand=[], action_func=get_human_action))
-
-    for i in range(num_players - 1):
-        ai_player = Player(name=f"Player {i + 1}", chips=1000, hand=[], action_func=get_random_action)
-        players.append(ai_player)
-
-    return players
-
-
-def setup_round(players: List[Player]) -> Tuple[List[Player], List[Card]]:
-    """
-    Setup initial game state with players (modified in place) and shuffled deck
-
-    :param players: The players to setup
-    :return: A shuffled deck
-    """
+def setup_round(players: List[Player]) -> List[Card]:
+    """Setup initial game state with players (modified in place) and shuffled deck."""
     deck = create_deck()
     random.shuffle(deck)
 
@@ -174,7 +151,7 @@ def determine_winners(active_players: List[Player], community_cards: List[Card])
     return player_hands
 
 
-def get_winners_from_hands(player_hands: Dict[Player, Tuple[int, List[int], List[Card]]]) -> List[Player]:
+def get_winners_from_hands(player_hands: Dict[Player, Tuple[int, List[int]]]) -> List[Player]:
     """Get list of winning players from hand evaluations."""
     best_score = max(player_hands.values(), key=lambda x: (x[0], x[1]))
     winners = [
@@ -193,8 +170,16 @@ def distribute_winnings(winners: List[Player], pot: int) -> int:
     else:
         # Split pot among winners
         split_amount = pot // len(winners)
+        remainder = pot % len(winners)
+
+        # Give each winner their share
         for winner in winners:
             winner.chips += split_amount
+
+        # Give remainder to first winner(s) to avoid losing chips
+        for i in range(remainder):
+            winners[i].chips += 1
+
         return split_amount
 
 
@@ -231,11 +216,7 @@ def process_betting_action(
     current_bet: int,
     active_players: List[Player],
 ) -> Tuple[int, int, bool]:
-    """
-    Process a betting action and return updated pot, current_bet, and whether there was a raise.
-
-    Returns: (new_pot, new_current_bet, was_raise)
-    """
+    """Process a betting action and return updated pot, current_bet, and whether there was a raise."""
 
     if action == Action.FOLD:
         active_players.remove(player)
@@ -246,7 +227,6 @@ def process_betting_action(
         player_bets[player] += amount
         player.chips -= amount
         pot += amount
-        print(f"   Pot is now {pot} chips")
         return pot, current_bet, False
     elif action == Action.RAISE:
         # Calculate maximum callable amount by other players
@@ -268,7 +248,6 @@ def process_betting_action(
         new_current_bet = effective_total_bet
         was_raise = new_current_bet > current_bet
 
-        print(f"   Pot is now {pot} chips")
         return pot, new_current_bet, was_raise
     else:
         raise ValueError(f"Invalid action: {action}")
