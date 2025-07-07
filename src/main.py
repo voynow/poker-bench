@@ -2,7 +2,7 @@ import asyncio
 import time
 from typing import Dict, List, Optional, Tuple
 
-from constants_and_types import NUM_OPPONENTS, Player
+from constants_and_types import NUM_OPPONENTS, BettingRoundResult, GameResult, Player
 from game import (
     apply_blinds,
     determine_winners,
@@ -22,14 +22,14 @@ def all_players_all_in(active_players: List[Player]) -> bool:
 async def betting_round(
     active_players: List[Player],
     pot: int,
-    current_bet: int,
+    current_bet: int = 0,
     blinds: Dict[Player, int] = None,
-) -> Tuple[int, int, List[Player]]:
+) -> BettingRoundResult:
     """Handle a betting round with AI players only."""
 
     # Skip betting if all players are all-in
     if all_players_all_in(active_players):
-        return pot, current_bet, active_players
+        return BettingRoundResult(pot=pot, active_players=active_players)
 
     players_to_act = list(active_players)
     player_bets = blinds.copy() if blinds else {player: 0 for player in active_players}
@@ -66,7 +66,7 @@ async def betting_round(
         if all_players_all_in(active_players):
             break
 
-    return pot, current_bet, active_players
+    return BettingRoundResult(pot=pot, active_players=active_players)
 
 
 async def play_round(players: List[Player]):
@@ -87,10 +87,9 @@ async def play_round(players: List[Player]):
         blind_bets[small_blind_player] = small_blind
         blind_bets[big_blind_player] = big_blind
 
-        pot, current_bet, active_players = await betting_round(
+        betting_round_result = await betting_round(
             active_players=active_players, pot=pot, current_bet=current_bet, blinds=blind_bets
         )
-        current_bet = 0
 
     # Post-flop: put small blind first (if still active)
     if len(active_players) > 1 and small_blind_player in active_players:
@@ -104,28 +103,26 @@ async def play_round(players: List[Player]):
         for _ in range(3):
             community_cards.append(deck.pop())
         if not all_players_all_in(active_players):
-            pot, current_bet, active_players = await betting_round(
-                active_players=active_players, pot=pot, current_bet=current_bet
+            betting_round_result = await betting_round(
+                active_players=betting_round_result.active_players, pot=betting_round_result.pot
             )
-            current_bet = 0
 
     # Deal turn (1 community card)
     if len(active_players) > 1:
         deck.pop()  # Burn card
         community_cards.append(deck.pop())
         if not all_players_all_in(active_players):
-            pot, current_bet, active_players = await betting_round(
-                active_players=active_players, pot=pot, current_bet=current_bet
+            betting_round_result = await betting_round(
+                active_players=betting_round_result.active_players, pot=betting_round_result.pot
             )
-            current_bet = 0
 
     # Deal river (1 community card)
     if len(active_players) > 1:
         deck.pop()  # Burn card
         community_cards.append(deck.pop())
         if not all_players_all_in(active_players):
-            pot, current_bet, active_players = await betting_round(
-                active_players=active_players, pot=pot, current_bet=current_bet
+            betting_round_result = await betting_round(
+                active_players=betting_round_result.active_players, pot=betting_round_result.pot
             )
 
     # Distribute pot to winner(s)
@@ -166,12 +163,12 @@ def setup_players() -> List[Player]:
     return players
 
 
-async def collect_game_results(max_rounds: int) -> Tuple[str, int, List[Player], List[Player]]:
+async def collect_game_result(max_rounds: int) -> GameResult:
     """
     Play a single game and return its results.
 
     :param max_rounds: The maximum number of rounds to play
-    :return: A tuple containing the winner, the number of rounds played, the final rankings, and the players eliminated
+    :return: A GameResult containing the winner, rounds played, final rankings, and eliminated players
     """
     players = setup_players()
 
@@ -186,15 +183,20 @@ async def collect_game_results(max_rounds: int) -> Tuple[str, int, List[Player],
     winner = sorted(players, key=lambda p: p.chips, reverse=True)[0].name
     final_rankings = sorted(players, key=lambda p: p.chips, reverse=True)
 
-    return winner, round_count, final_rankings, eliminated_players
+    return GameResult(
+        winner=winner,
+        rounds_played=round_count,
+        final_rankings=final_rankings,
+        eliminated_players=eliminated_players,
+    )
 
 
 async def main():
     start_time = time.time()
-    n_games = 250
-    max_rounds = 50
+    n_games = 100
+    max_rounds = 25
 
-    game_tasks = [collect_game_results(max_rounds) for _ in range(n_games)]
+    game_tasks = [collect_game_result(max_rounds) for _ in range(n_games)]
     game_results = await asyncio.gather(*game_tasks)
 
     results = {
@@ -204,23 +206,23 @@ async def main():
         "players_eliminated": [],
     }
 
-    for winner, rounds, rankings, eliminated in game_results:
-        results["winning_strategy"].append(winner)
-        results["rounds_played"].append(rounds)
-        results["final_rankings"].append(rankings)
-        results["players_eliminated"].append(eliminated)
+    for game_result in game_results:
+        results["winning_strategy"].append(game_result.winner)
+        results["rounds_played"].append(game_result.rounds_played)
+        results["final_rankings"].append(game_result.final_rankings)
+        results["players_eliminated"].append(game_result.eliminated_players)
 
-    end_time = time.time()
-    print(f"Done in {end_time - start_time} seconds")
+    elapsed_time = time.time() - start_time
+    minutes = int(elapsed_time // 60)
+    seconds = int(elapsed_time % 60)
+    print(f"Done in {minutes}m {seconds}s")
 
-    # what percentage of games did the strategic player win?
-    print(f"Strategic player won {results['winning_strategy'].count('Strategic') / n_games * 100}% of games")
-
-    # what percentage of games did the placeholder player win?
-    print(f"Placeholder player won {results['winning_strategy'].count('Placeholder') / n_games * 100}% of games")
-
-    # what percentage of games did the random player win?
-    print(f"Random player won {len(results['winning_strategy']) - results['winning_strategy'].count('Strategic') - results['winning_strategy'].count('Placeholder') / n_games * 100}% of games")
+    strategic_wins = results["winning_strategy"].count("Strategic")
+    placeholder_wins = results["winning_strategy"].count("Placeholder")
+    random_wins = len(results["winning_strategy"]) - strategic_wins - placeholder_wins
+    print(f"Strategic player won {strategic_wins / n_games * 100:.2f}% of games")
+    print(f"Placeholder player won {placeholder_wins / n_games * 100:.2f}% of games")
+    print(f"Random player won {random_wins / n_games * 100:.2f}% of games")
 
 
 if __name__ == "__main__":

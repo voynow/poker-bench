@@ -36,6 +36,22 @@ class ActionResponse(BaseModel):
     amount: int
 
 
+class BettingRoundResult(BaseModel):
+    """Result of a betting round."""
+
+    pot: int
+    active_players: List[Player]
+
+
+class GameResult(BaseModel):
+    """Result of a single poker game."""
+
+    winner: str
+    rounds_played: int
+    final_rankings: List[Player]
+    eliminated_players: List[Player]
+
+
 class Suit(Enum):
     """Represent the four suits in a standard deck."""
 
