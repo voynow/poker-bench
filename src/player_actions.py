@@ -1,16 +1,29 @@
 from __future__ import annotations
 
-import asyncio
 import random
+from textwrap import dedent
+from typing import List
 
-from constants_and_types import Action, ActionResponse, Player
-from game import evaluate_hand
+from constants_and_types import (
+    Action,
+    ActionResponse,
+    BettingRound,
+    CallFoldOrRaise,
+    Card,
+    CheckOrRaise,
+    Player,
+    hand_to_string,
+)
+from game import best_hand_from_seven, evaluate_hand
+from llm import get_completion_structured
 
 
 async def get_random_action(
     player: Player,
     amount_to_call: int,
     player_chips: int,
+    community_cards: List[Card],
+    betting_round: BettingRound,
 ) -> ActionResponse:
     """
     Get a random action for an AI player
@@ -21,6 +34,8 @@ async def get_random_action(
     :param player: The player to get an action for
     :param amount_to_call: The bet amount required in order to stay in the hand
     :param player_chips: The number of chips the player has
+    :param community_cards: The community cards currently on the table
+    :param betting_round: The current betting round
     :return: An ActionResponse object with the action and amount
     """
     if amount_to_call == 0:
@@ -52,6 +67,8 @@ async def get_hand_strength_based_action(
     player: Player,
     amount_to_call: int,
     player_chips: int,
+    community_cards: List[Card],
+    betting_round: BettingRound,
 ) -> ActionResponse:
     """
     Get a strategic action for an AI player based on hand strength.
@@ -62,10 +79,18 @@ async def get_hand_strength_based_action(
     :param player: The player to get an action for
     :param amount_to_call: The bet amount required in order to stay in the hand
     :param player_chips: The number of chips the player has
+    :param community_cards: The community cards currently on the table
+    :param betting_round: The current betting round
     :return: An ActionResponse object with the action and amount
     """
-    # Evaluate current hand strength (just hole cards initially)
-    hand_type, tiebreakers = evaluate_hand(player.hand)
+    # Evaluate current hand strength
+    if community_cards:
+        # Post-flop: use best hand from hole cards + community cards
+        all_cards = player.hand + community_cards
+        hand_type, tiebreakers = best_hand_from_seven(all_cards)
+    else:
+        # Pre-flop: just hole cards
+        hand_type, tiebreakers = evaluate_hand(player.hand)
 
     # Get the ranks of our two hole cards
     ranks = sorted([card[0] for card in player.hand], reverse=True)
@@ -83,15 +108,24 @@ async def get_hand_strength_based_action(
     # Calculate relative bet size
     bet_ratio = amount_to_call / max(player_chips, 1)
 
+    # Adjust strategy based on hand strength (post-flop hands are stronger)
+    hand_strength_multiplier = 1.0
+    if community_cards:
+        # Post-flop: stronger hands (pairs, two pair, etc.) get more aggressive
+        if hand_type >= 2:  # Two pair or better
+            hand_strength_multiplier = 2.0
+        elif hand_type == 1:  # One pair
+            hand_strength_multiplier = 1.5
+
     # Strong hands - play aggressively
-    if is_high_pair or (is_pocket_pair and high_card >= 7):
+    if is_high_pair or (is_pocket_pair and high_card >= 7) or (hand_type >= 2 and community_cards):
         if amount_to_call == 0:
             # No bet to call, bet aggressively
-            bet_amount = min(15, player_chips)
+            bet_amount = min(int(15 * hand_strength_multiplier), player_chips)
             return ActionResponse(action=Action.RAISE, amount=bet_amount)
         elif bet_ratio < 0.3:
             # Small bet relative to our stack, raise
-            raise_amount = min(amount_to_call + 15, player_chips)
+            raise_amount = min(int((amount_to_call + 15) * hand_strength_multiplier), player_chips)
             return ActionResponse(action=Action.RAISE, amount=raise_amount)
         else:
             # Large bet, but we have a strong hand, call
@@ -99,13 +133,18 @@ async def get_hand_strength_based_action(
             return ActionResponse(action=Action.CALL, amount=call_amount)
 
     # Medium-strong hands - play moderately aggressive
-    elif (has_ace and has_face_card) or (is_suited and has_face_card) or (is_connected and has_face_card):
+    elif (
+        (has_ace and has_face_card)
+        or (is_suited and has_face_card)
+        or (is_connected and has_face_card)
+        or (hand_type == 1 and community_cards)
+    ):
         if amount_to_call == 0:
             # No bet to call, check or small bet
             if random.random() < 0.6:
                 return ActionResponse(action=Action.CHECK, amount=0)
             else:
-                bet_amount = min(10, player_chips)
+                bet_amount = min(int(10 * hand_strength_multiplier), player_chips)
                 return ActionResponse(action=Action.RAISE, amount=bet_amount)
         elif bet_ratio < 0.2:
             # Small bet, call or raise
@@ -113,7 +152,7 @@ async def get_hand_strength_based_action(
                 call_amount = min(amount_to_call, player_chips)
                 return ActionResponse(action=Action.CALL, amount=call_amount)
             else:
-                raise_amount = min(amount_to_call + 10, player_chips)
+                raise_amount = min(int((amount_to_call + 10) * hand_strength_multiplier), player_chips)
                 return ActionResponse(action=Action.RAISE, amount=raise_amount)
         elif bet_ratio < 0.4:
             # Medium bet, usually call
@@ -151,9 +190,18 @@ async def get_check_call_action(
     player: Player,
     amount_to_call: int,
     player_chips: int,
+    community_cards: List[Card],
+    betting_round: BettingRound,
 ) -> ActionResponse:
     """
     This type of player will always either check or call.
+
+    :param player: The player to get an action for
+    :param amount_to_call: The bet amount required in order to stay in the hand
+    :param player_chips: The number of chips the player has
+    :param community_cards: The community cards currently on the table
+    :param betting_round: The current betting round
+    :return: An ActionResponse object with the action and amount
     """
     if amount_to_call == 0:
         return ActionResponse(action=Action.CHECK, amount=0)
@@ -161,14 +209,46 @@ async def get_check_call_action(
         return ActionResponse(action=Action.CALL, amount=amount_to_call)
 
 
-async def get_placeholder_async_action(
+async def get_llm_one_shot_action(
     player: Player,
     amount_to_call: int,
     player_chips: int,
+    community_cards: List[Card],
+    betting_round: BettingRound,
 ) -> ActionResponse:
-    # can we do an async sleep to simulate an asyncronous network call?
-    await asyncio.sleep(1)
-    if amount_to_call == 0:
-        return ActionResponse(action=Action.CHECK, amount=0)
+    """
+    Get action using LLM one-shot
+
+    :param player: The player to get an action for
+    :param amount_to_call: The bet amount required in order to stay in the hand
+    :param player_chips: The number of chips the player has
+    :param community_cards: The community cards currently on the table
+    :param betting_round: The current betting round
+    :return: An ActionResponse object with the action and amount
+    """
+    # Build community cards string
+    if community_cards:
+        community_cards_str = f"Community cards: {hand_to_string(community_cards)}"
     else:
-        return ActionResponse(action=Action.CALL, amount=amount_to_call)
+        community_cards_str = "Community cards: None (pre-flop)"
+
+    prompt = dedent(
+        f"""# Background
+        You are a professional poker player. You will be given information regarding the current state of the game. Your job is to decide what action to take based on the state.
+
+        # Game state
+        - Betting round: {betting_round.value}
+        - Amount of chips needing to be called: {amount_to_call}
+        - Your hole cards: {hand_to_string(player.hand)}
+        - {community_cards_str}
+        - You have {player_chips} chips
+        """
+    )
+    if amount_to_call == 0:
+        response = await get_completion_structured(prompt, CheckOrRaise)
+    else:
+        response = await get_completion_structured(prompt, CallFoldOrRaise)
+
+    # Handle case where LLM returns None for amount
+    amount = response.amount if response.amount is not None else 0
+    return ActionResponse(action=Action(response.action), amount=amount)
