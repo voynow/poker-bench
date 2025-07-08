@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from enum import Enum, StrEnum
-from typing import Callable, List, Tuple
+from typing import Callable, List, Literal, Optional, Tuple
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 NUM_OPPONENTS = 5
 
@@ -29,6 +29,13 @@ class Action(StrEnum):
     CALL = "call"
     FOLD = "fold"
     RAISE = "raise"
+
+
+class BettingRound(StrEnum):
+    PRE_FLOP = "pre_flop"
+    FLOP = "flop"
+    TURN = "turn"
+    RIVER = "river"
 
 
 class ActionResponse(BaseModel):
@@ -69,7 +76,7 @@ class Player(BaseModel):
     name: str
     chips: int
     hand: Hand
-    action_func: Callable[[Player, int, int], ActionResponse]
+    action_func: Callable[[Player, int, int, List[Card], BettingRound], ActionResponse]
 
     def __hash__(self):
         """Make Player hashable so it can be used in sets and as dict keys."""
@@ -79,3 +86,13 @@ class Player(BaseModel):
 def hand_to_string(hand: Hand) -> str:
     """Convert hand to readable string."""
     return " ".join(f"{RANKS[rank - 2]}{suit.value}" for rank, suit in hand)
+
+
+class CheckOrRaise(BaseModel):
+    action: Literal["check", "raise"]
+    amount: Optional[int] = Field(None, description="The amount to raise if the action is raise. Otherwise, None.")
+
+
+class CallFoldOrRaise(BaseModel):
+    action: Literal["call", "fold", "raise"]
+    amount: Optional[int] = Field(None, description="The amount to raise if the action is raise. Otherwise, None.")

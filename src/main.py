@@ -4,7 +4,7 @@ from typing import Counter, Dict, List, Optional, Tuple
 
 from tqdm import tqdm
 
-from constants_and_types import NUM_OPPONENTS, BettingRoundResult, GameResult, Player
+from constants_and_types import NUM_OPPONENTS, BettingRound, BettingRoundResult, Card, GameResult, Player
 from game import (
     apply_blinds,
     determine_winners,
@@ -13,7 +13,12 @@ from game import (
     process_betting_action,
     setup_round,
 )
-from player_actions import get_check_call_action, get_hand_strength_based_action, get_random_action
+from player_actions import (
+    get_check_call_action,
+    get_hand_strength_based_action,
+    get_llm_one_shot_action,
+    get_random_action,
+)
 
 
 def all_players_all_in(active_players: List[Player]) -> bool:
@@ -24,6 +29,8 @@ def all_players_all_in(active_players: List[Player]) -> bool:
 async def betting_round(
     active_players: List[Player],
     pot: int,
+    community_cards: List[Card],
+    betting_round_type: BettingRound,
     current_bet: int = 0,
     blinds: Dict[Player, int] = None,
 ) -> BettingRoundResult:
@@ -45,7 +52,7 @@ async def betting_round(
         to_call = current_bet - player_bets[player]
 
         action_func = player.action_func
-        action_response = await action_func(player, to_call, player.chips)
+        action_response = await action_func(player, to_call, player.chips, community_cards, betting_round_type)
 
         # Process the action using game logic
         pot, current_bet, was_raise = process_betting_action(
@@ -90,10 +97,16 @@ async def play_round(players: List[Player]):
         blind_bets[big_blind_player] = big_blind
 
         betting_round_result = await betting_round(
-            active_players=active_players, pot=pot, current_bet=current_bet, blinds=blind_bets
+            active_players=active_players,
+            pot=pot,
+            community_cards=[],
+            betting_round_type=BettingRound.PRE_FLOP,
+            current_bet=current_bet,
+            blinds=blind_bets,
         )
 
     # Post-flop: put small blind first (if still active)
+    active_players = betting_round_result.active_players
     if len(active_players) > 1 and small_blind_player in active_players:
         sb_idx = active_players.index(small_blind_player)
         active_players = active_players[sb_idx:] + active_players[:sb_idx]
@@ -106,36 +119,48 @@ async def play_round(players: List[Player]):
             community_cards.append(deck.pop())
         if not all_players_all_in(active_players):
             betting_round_result = await betting_round(
-                active_players=betting_round_result.active_players, pot=betting_round_result.pot
+                active_players=active_players,
+                pot=betting_round_result.pot,
+                community_cards=community_cards,
+                betting_round_type=BettingRound.FLOP,
             )
 
     # Deal turn (1 community card)
-    if len(active_players) > 1:
+    if len(betting_round_result.active_players) > 1:
         deck.pop()  # Burn card
         community_cards.append(deck.pop())
-        if not all_players_all_in(active_players):
+        if not all_players_all_in(betting_round_result.active_players):
             betting_round_result = await betting_round(
-                active_players=betting_round_result.active_players, pot=betting_round_result.pot
+                active_players=betting_round_result.active_players,
+                pot=betting_round_result.pot,
+                community_cards=community_cards,
+                betting_round_type=BettingRound.TURN,
             )
 
     # Deal river (1 community card)
-    if len(active_players) > 1:
+    if len(betting_round_result.active_players) > 1:
         deck.pop()  # Burn card
         community_cards.append(deck.pop())
-        if not all_players_all_in(active_players):
+        if not all_players_all_in(betting_round_result.active_players):
             betting_round_result = await betting_round(
-                active_players=betting_round_result.active_players, pot=betting_round_result.pot
+                active_players=betting_round_result.active_players,
+                pot=betting_round_result.pot,
+                community_cards=community_cards,
+                betting_round_type=BettingRound.RIVER,
             )
 
     # Distribute pot to winner(s)
-    if len(active_players) == 1:
-        winner = active_players[0]
-        winner.chips += pot
-    elif len(active_players) > 1:
+    final_active_players = betting_round_result.active_players
+    final_pot = betting_round_result.pot
+
+    if len(final_active_players) == 1:
+        winner = final_active_players[0]
+        winner.chips += final_pot
+    elif len(final_active_players) > 1:
         # Showdown - determine winners and distribute pot
-        player_hands = determine_winners(active_players, community_cards)
+        player_hands = determine_winners(final_active_players, community_cards)
         winners = get_winners_from_hands(player_hands)
-        distribute_winnings(winners, pot)
+        distribute_winnings(winners, final_pot)
 
 
 def eliminate_players(players: List[Player]) -> Tuple[List[Player], Optional[List[Player]]]:
@@ -154,7 +179,12 @@ def setup_players() -> List[Player]:
     """
     players: List[Player] = []
 
-    player_archetypes = [get_hand_strength_based_action, get_check_call_action, get_random_action]
+    player_archetypes = [
+        get_check_call_action,
+        get_hand_strength_based_action,
+        get_random_action,
+        get_llm_one_shot_action,
+    ]
     player_archetypes_counts = {func: 1 for func in player_archetypes}
 
     while len(players) < NUM_OPPONENTS:
@@ -220,8 +250,8 @@ async def run_games(n_games: int, max_rounds: int) -> List[GameResult]:
 
 async def main():
     start_time = time.time()
-    n_games = 2500
-    max_rounds = 5
+    n_games = 100
+    max_rounds = 100
 
     game_results = await run_games(n_games, max_rounds)
 
