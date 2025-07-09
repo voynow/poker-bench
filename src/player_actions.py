@@ -215,6 +215,7 @@ async def get_llm_one_shot_action(
     player_chips: int,
     community_cards: List[Card],
     betting_round: BettingRound,
+    model: str = "gpt-4o-mini",
 ) -> ActionResponse:
     """
     Get action using LLM one-shot
@@ -245,9 +246,9 @@ async def get_llm_one_shot_action(
         """
     )
     if amount_to_call == 0:
-        response = await get_completion_structured(prompt, CheckOrRaise)
+        response = await get_completion_structured(prompt, CheckOrRaise, model=model)
     else:
-        response = await get_completion_structured(prompt, CallFoldOrRaise)
+        response = await get_completion_structured(prompt, CallFoldOrRaise, model=model)
 
     # Handle case where LLM returns None for amount
     amount = response.amount if response.amount is not None else 0

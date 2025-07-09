@@ -1,5 +1,6 @@
 import asyncio
 import time
+from functools import partial
 from typing import Counter, List
 
 from tqdm import tqdm
@@ -23,19 +24,16 @@ def setup_players() -> List[Player]:
     """
     players: List[Player] = []
 
-    player_archetypes = [
-        get_check_call_action,
-        get_hand_strength_based_action,
-        get_random_action,
-        get_llm_one_shot_action,
-    ]
-    player_archetypes_counts = {func: 1 for func in player_archetypes}
+    llm_one_shot_4o_mini_action = partial(get_llm_one_shot_action, model="gpt-4o-mini")
+    llm_one_shot_4_1_mini_action = partial(get_llm_one_shot_action, model="gpt-4.1-mini")
+    llm_one_shot_4_1_nano_action = partial(get_llm_one_shot_action, model="gpt-4.1-nano")
 
-    while len(players) < NUM_OPPONENTS:
-        for func in player_archetypes:
-            name = f"{func.__name__},{player_archetypes_counts[func]}"
-            players.append(Player(name=name, chips=1000, hand=[], action_func=func))
-            player_archetypes_counts[func] += 1
+    players.append(Player(name="check_call", chips=1000, hand=[], action_func=get_check_call_action))
+    players.append(Player(name="hand_strength", chips=1000, hand=[], action_func=get_hand_strength_based_action))
+    players.append(Player(name="random", chips=1000, hand=[], action_func=get_random_action))
+    players.append(Player(name="llm_one_shot_4o_mini", chips=1000, hand=[], action_func=llm_one_shot_4o_mini_action))
+    players.append(Player(name="llm_one_shot_4_1_mini", chips=1000, hand=[], action_func=llm_one_shot_4_1_mini_action))
+    players.append(Player(name="llm_one_shot_4_1_nano", chips=1000, hand=[], action_func=llm_one_shot_4_1_nano_action))
 
     return players
 
@@ -94,7 +92,7 @@ async def run_games(n_games: int, max_rounds: int) -> List[GameResult]:
 
 async def main():
     start_time = time.time()
-    n_games = 100
+    n_games = 10
     max_rounds = 100
 
     game_results = await run_games(n_games, max_rounds)
