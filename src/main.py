@@ -1,17 +1,16 @@
 import asyncio
-import time
 from functools import partial
-from typing import Counter, List
+from typing import List
 
 from tqdm import tqdm
 
-from constants_and_types import NUM_OPPONENTS, GameResult, Player
+from constants_and_types import STARTING_CHIPS, GameResult, Player
 from game import eliminate_players, play_round
+from llm import clear_llm_log
+from metrics import print_metrics
 from player_actions import (
-    get_check_call_action,
     get_hand_strength_based_action,
     get_llm_one_shot_action,
-    get_random_action,
 )
 
 
@@ -19,23 +18,19 @@ def setup_players() -> List[Player]:
     """
     Setup players of varying player archetypes
 
-    :param num_players: The number of players to setup
     :return: A list of players
     """
-    players: List[Player] = []
-
     llm_one_shot_4o_mini_action = partial(get_llm_one_shot_action, model="gpt-4o-mini")
     llm_one_shot_4_1_mini_action = partial(get_llm_one_shot_action, model="gpt-4.1-mini")
     llm_one_shot_4_1_nano_action = partial(get_llm_one_shot_action, model="gpt-4.1-nano")
-
-    players.append(Player(name="check_call", chips=1000, hand=[], action_func=get_check_call_action))
-    players.append(Player(name="hand_strength", chips=1000, hand=[], action_func=get_hand_strength_based_action))
-    players.append(Player(name="random", chips=1000, hand=[], action_func=get_random_action))
-    players.append(Player(name="llm_one_shot_4o_mini", chips=1000, hand=[], action_func=llm_one_shot_4o_mini_action))
-    players.append(Player(name="llm_one_shot_4_1_mini", chips=1000, hand=[], action_func=llm_one_shot_4_1_mini_action))
-    players.append(Player(name="llm_one_shot_4_1_nano", chips=1000, hand=[], action_func=llm_one_shot_4_1_nano_action))
-
-    return players
+    return [
+        Player(name="hand_strength_algo_1", chips=STARTING_CHIPS, hand=[], action_func=get_hand_strength_based_action),
+        Player(name="hand_strength_algo_2", chips=STARTING_CHIPS, hand=[], action_func=get_hand_strength_based_action),
+        Player(name="hand_strength_algo_3", chips=STARTING_CHIPS, hand=[], action_func=get_hand_strength_based_action),
+        Player(name="llm_one_shot_4o_mini", chips=STARTING_CHIPS, hand=[], action_func=llm_one_shot_4o_mini_action),
+        Player(name="llm_one_shot_4_1_mini", chips=STARTING_CHIPS, hand=[], action_func=llm_one_shot_4_1_mini_action),
+        Player(name="llm_one_shot_4_1_nano", chips=STARTING_CHIPS, hand=[], action_func=llm_one_shot_4_1_nano_action),
+    ]
 
 
 async def collect_game_result(max_rounds: int) -> GameResult:
@@ -51,7 +46,7 @@ async def collect_game_result(max_rounds: int) -> GameResult:
     eliminated_players = []
     all_betting_rounds = []
     while round_count < max_rounds and len(players) >= 2:
-        round_betting_results = await play_round(players)
+        round_betting_results = await play_round(round_number=round_count, players=players)
         all_betting_rounds.extend(round_betting_results)
         players, eliminated_this_round = eliminate_players(players)
         eliminated_players.extend(eliminated_this_round)
@@ -94,34 +89,12 @@ async def run_games(n_games: int, max_rounds: int) -> List[GameResult]:
 
 
 async def main():
-    start_time = time.time()
     n_games = 10
     max_rounds = 100
 
-    game_results = await run_games(n_games, max_rounds)
-
-    # Process results
-    results = {
-        "winning_strategy": [r.winner for r in game_results],
-        "rounds_played": [r.rounds_played for r in game_results],
-        "final_rankings": [r.final_rankings for r in game_results],
-        "players_eliminated": [r.eliminated_players for r in game_results],
-    }
-
-    elapsed_time = time.time() - start_time
-    minutes = int(elapsed_time // 60)
-    seconds = int(elapsed_time % 60)
-    print(f"Done in {minutes}m {seconds}s")
-
-    winning_strategies = [res.split(",")[0] for res in results["winning_strategy"]]
-    strategy_counts = Counter(winning_strategies)
-    total_games = len(winning_strategies)
-
-    print("\nWinning Strategy Results:")
-    print("-" * 40)
-    for strategy, count in strategy_counts.most_common():
-        percentage = (count / total_games) * 100
-        print(f"{strategy:<30} {count:>3} ({percentage:>5.1f}%)")
+    clear_llm_log()
+    game_results: List[GameResult] = await run_games(n_games, max_rounds)
+    print_metrics(game_results)
 
 
 if __name__ == "__main__":

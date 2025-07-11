@@ -5,9 +5,9 @@ from typing import Callable, Dict, List, Literal, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
-NUM_OPPONENTS = 5
-
 RANKS = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"]
+
+STARTING_CHIPS = 1000
 
 RANK_VALUES = {rank: i + 2 for i, rank in enumerate(RANKS)}
 
@@ -37,6 +37,9 @@ class BettingRound(StrEnum):
     TURN = "turn"
     RIVER = "river"
 
+    def rank(self) -> int:
+        return {self.PRE_FLOP: 0, self.FLOP: 1, self.TURN: 2, self.RIVER: 3}[self]
+
 
 class ActionResponse(BaseModel):
     action: Action
@@ -44,6 +47,7 @@ class ActionResponse(BaseModel):
 
 
 class BettingRoundResult(BaseModel):
+    round_number: int
     betting_round_type: BettingRound
     players_actions: Dict[Player, ActionResponse]
     starting_pot: int

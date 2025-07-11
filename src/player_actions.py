@@ -9,8 +9,10 @@ from constants_and_types import (
     ActionResponse,
     BettingRound,
     CallFoldOrRaise,
+    CallFoldOrRaiseWithReasoning,
     Card,
     CheckOrRaise,
+    CheckOrRaiseWithReasoning,
     Player,
     hand_to_string,
 )
@@ -235,7 +237,7 @@ async def get_llm_one_shot_action(
 
     prompt = dedent(
         f"""# Background
-        You are a professional poker player. You will be given information regarding the current state of the game. Your job is to decide what action to take based on the state.
+        You're a pro poker player. Given the following game state, your job is to decide what action to take:
 
         # Game state
         - Betting round: {betting_round.value}
