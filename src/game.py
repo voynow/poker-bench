@@ -268,6 +268,7 @@ def all_players_all_in(active_players: List[Player]) -> bool:
 
 
 async def betting_round(
+    round_number: int,
     active_players: List[Player],
     pot: int,
     community_cards: List[Card],
@@ -281,6 +282,7 @@ async def betting_round(
     # Skip betting if all players are all-in
     if all_players_all_in(active_players):
         return BettingRoundResult(
+            round_number=round_number,
             betting_round_type=betting_round_type,
             players_actions={},
             starting_pot=starting_pot,
@@ -329,6 +331,7 @@ async def betting_round(
             break
 
     return BettingRoundResult(
+        round_number=round_number,
         betting_round_type=betting_round_type,
         players_actions=players_actions,
         starting_pot=starting_pot,
@@ -338,7 +341,7 @@ async def betting_round(
     )
 
 
-async def play_round(players: List[Player]) -> List[BettingRoundResult]:
+async def play_round(round_number: int, players: List[Player]) -> List[BettingRoundResult]:
     """Play a single round of Texas Hold'em."""
     deck = setup_round(players)
     betting_round_results = []
@@ -358,6 +361,7 @@ async def play_round(players: List[Player]) -> List[BettingRoundResult]:
         blind_bets[big_blind_player] = big_blind
 
         betting_round_result = await betting_round(
+            round_number=round_number,
             active_players=active_players,
             pot=pot,
             community_cards=[],
@@ -381,6 +385,7 @@ async def play_round(players: List[Player]) -> List[BettingRoundResult]:
             community_cards.append(deck.pop())
         if not all_players_all_in(active_players):
             betting_round_result = await betting_round(
+                round_number=round_number,
                 active_players=active_players,
                 pot=betting_round_result.final_pot,
                 community_cards=community_cards,
@@ -394,6 +399,7 @@ async def play_round(players: List[Player]) -> List[BettingRoundResult]:
         community_cards.append(deck.pop())
         if not all_players_all_in(betting_round_result.active_players):
             betting_round_result = await betting_round(
+                round_number=round_number,
                 active_players=betting_round_result.active_players,
                 pot=betting_round_result.final_pot,
                 community_cards=community_cards,
@@ -407,6 +413,7 @@ async def play_round(players: List[Player]) -> List[BettingRoundResult]:
         community_cards.append(deck.pop())
         if not all_players_all_in(betting_round_result.active_players):
             betting_round_result = await betting_round(
+                round_number=round_number,
                 active_players=betting_round_result.active_players,
                 pot=betting_round_result.final_pot,
                 community_cards=community_cards,
