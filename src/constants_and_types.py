@@ -45,10 +45,11 @@ class ActionResponse(BaseModel):
 
 class BettingRoundResult(BaseModel):
     betting_round_type: BettingRound
-    players_actions: Dict[Player, List[ActionResponse]]
+    players_actions: Dict[Player, ActionResponse]
     starting_pot: int
     final_pot: int
     community_cards: List[Card]
+    active_players: List[Player]
 
 
 class GameResult(BaseModel):
@@ -58,7 +59,7 @@ class GameResult(BaseModel):
     rounds_played: int
     final_rankings: List[Player]
     eliminated_players: List[Player]
-    # betting_rounds: List[BettingRoundResult]
+    betting_rounds: List[BettingRoundResult]
 
 
 class Suit(Enum):

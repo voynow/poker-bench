@@ -49,8 +49,10 @@ async def collect_game_result(max_rounds: int) -> GameResult:
 
     round_count = 0
     eliminated_players = []
+    all_betting_rounds = []
     while round_count < max_rounds and len(players) >= 2:
-        await play_round(players)
+        round_betting_results = await play_round(players)
+        all_betting_rounds.extend(round_betting_results)
         players, eliminated_this_round = eliminate_players(players)
         eliminated_players.extend(eliminated_this_round)
         round_count += 1
@@ -63,6 +65,7 @@ async def collect_game_result(max_rounds: int) -> GameResult:
         rounds_played=round_count,
         final_rankings=final_rankings,
         eliminated_players=eliminated_players,
+        betting_rounds=all_betting_rounds,
     )
 
 
