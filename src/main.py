@@ -8,10 +8,7 @@ from constants_and_types import STARTING_CHIPS, GameResult, Player
 from game import eliminate_players, play_round
 from llm import clear_llm_log
 from metrics import print_metrics
-from player_actions import (
-    get_hand_strength_based_action,
-    get_llm_one_shot_action,
-)
+from player_actions import get_llm_one_shot_action, get_llm_reasoning_action
 
 
 def setup_players() -> List[Player]:
@@ -20,17 +17,21 @@ def setup_players() -> List[Player]:
 
     :return: A list of players
     """
-    llm_one_shot_4o_mini_action = partial(get_llm_one_shot_action, model="gpt-4o-mini")
-    llm_one_shot_4_1_mini_action = partial(get_llm_one_shot_action, model="gpt-4.1-mini")
-    llm_one_shot_4_1_nano_action = partial(get_llm_one_shot_action, model="gpt-4.1-nano")
-    return [
-        Player(name="hand_strength_algo_1", chips=STARTING_CHIPS, hand=[], action_func=get_hand_strength_based_action),
-        Player(name="hand_strength_algo_2", chips=STARTING_CHIPS, hand=[], action_func=get_hand_strength_based_action),
-        Player(name="hand_strength_algo_3", chips=STARTING_CHIPS, hand=[], action_func=get_hand_strength_based_action),
-        Player(name="llm_one_shot_4o_mini", chips=STARTING_CHIPS, hand=[], action_func=llm_one_shot_4o_mini_action),
-        Player(name="llm_one_shot_4_1_mini", chips=STARTING_CHIPS, hand=[], action_func=llm_one_shot_4_1_mini_action),
-        Player(name="llm_one_shot_4_1_nano", chips=STARTING_CHIPS, hand=[], action_func=llm_one_shot_4_1_nano_action),
+    models = ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4.1-nano"]
+    strategies = [
+        ("one_shot", get_llm_one_shot_action),
+        ("reasoning", get_llm_reasoning_action),
     ]
+
+    players = []
+    for model in models:
+        for strategy_name, strategy_func in strategies:
+            name = f"{strategy_name}_{model}"
+            action_func = partial(strategy_func, model=model, function_name=name)
+
+            players.append(Player(name=name, chips=STARTING_CHIPS, hand=[], action_func=action_func))
+
+    return players
 
 
 async def collect_game_result(max_rounds: int) -> GameResult:
@@ -89,7 +90,7 @@ async def run_games(n_games: int, max_rounds: int) -> List[GameResult]:
 
 
 async def main():
-    n_games = 10
+    n_games = 100
     max_rounds = 100
 
     clear_llm_log()

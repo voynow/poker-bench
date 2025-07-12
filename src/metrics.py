@@ -110,8 +110,8 @@ def calc_average_bet_size(game_results: List[GameResult]) -> None:
     for game_result in game_results:
         for betting_round in game_result.betting_rounds:
             for player, action_response in betting_round.players_actions.items():
-                # Record the amount committed (0 for fold/check, actual amount for call/raise)
-                player_bets[player.name].append(action_response.amount)
+                # Record the actual amount contributed to the pot
+                player_bets[player.name].append(action_response.actual_amount_contributed)
 
     # Calculate average bet sizes
     avg_bet_data = []
@@ -125,7 +125,7 @@ def calc_average_bet_size(game_results: List[GameResult]) -> None:
 
     data = [(name, f"{avg:.1f} chips") for name, avg, actions in avg_bet_data]
     print_table("Average Bet Size", data)
-    print("The avg chips committed for each action")
+    print("The avg chips actually contributed to the pot per action")
 
 
 def calc_raise_frequency(game_results: List[GameResult]) -> None:

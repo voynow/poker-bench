@@ -1,0 +1,59 @@
+-------------------------------------
+           Total Net Chips           
+-------------------------------------
+one_shot_gpt-4.1-mini   119,195 chips
+reasoning_gpt-4.1-mini  116,138 chips
+reasoning_gpt-4.1-nano  111,571 chips
+reasoning_gpt-4o-mini   110,429 chips
+one_shot_gpt-4o-mini     89,210 chips
+one_shot_gpt-4.1-nano    53,491 chips
+-------------------------------------
+The total net chips across all games
+
+----------------------------------
+         Chip Volatility          
+----------------------------------
+one_shot_gpt-4.1-nano   1197 chips
+reasoning_gpt-4.1-mini  1253 chips
+one_shot_gpt-4.1-mini   1751 chips
+one_shot_gpt-4o-mini    1776 chips
+reasoning_gpt-4.1-nano  1852 chips
+reasoning_gpt-4o-mini   1970 chips
+----------------------------------
+The std dev of chip count across games
+
+----------------------------------
+         Average Bet Size         
+----------------------------------
+one_shot_gpt-4o-mini    42.8 chips
+reasoning_gpt-4o-mini   32.8 chips
+reasoning_gpt-4.1-nano  29.8 chips
+one_shot_gpt-4.1-mini   21.6 chips
+one_shot_gpt-4.1-nano   20.9 chips
+reasoning_gpt-4.1-mini   9.6 chips
+----------------------------------
+The avg chips actually contributed to the pot per action
+
+-----------------------------
+        Aggressiveness       
+-----------------------------
+reasoning_gpt-4o-mini   19.9%
+reasoning_gpt-4.1-nano  19.5%
+one_shot_gpt-4o-mini    15.9%
+one_shot_gpt-4.1-mini   11.9%
+reasoning_gpt-4.1-mini   6.8%
+one_shot_gpt-4.1-nano    3.1%
+-----------------------------
+The % of actions that are raises
+
+-----------------------------
+          Passivity          
+-----------------------------
+one_shot_gpt-4o-mini     8.2%
+one_shot_gpt-4.1-nano   15.2%
+reasoning_gpt-4.1-nano  17.0%
+reasoning_gpt-4o-mini   24.0%
+one_shot_gpt-4.1-mini   28.5%
+reasoning_gpt-4.1-mini  28.9%
+-----------------------------
+The % of actions that are folds

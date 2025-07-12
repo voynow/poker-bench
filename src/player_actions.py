@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import random
-from textwrap import dedent
 from typing import List
 
 from constants_and_types import (
@@ -22,6 +21,7 @@ from llm import get_completion_structured
 
 async def get_random_action(
     player: Player,
+    pot: int,
     amount_to_call: int,
     player_chips: int,
     community_cards: List[Card],
@@ -67,6 +67,7 @@ async def get_random_action(
 
 async def get_hand_strength_based_action(
     player: Player,
+    pot: int,
     amount_to_call: int,
     player_chips: int,
     community_cards: List[Card],
@@ -190,6 +191,7 @@ async def get_hand_strength_based_action(
 
 async def get_check_call_action(
     player: Player,
+    pot: int,
     amount_to_call: int,
     player_chips: int,
     community_cards: List[Card],
@@ -213,20 +215,24 @@ async def get_check_call_action(
 
 async def get_llm_one_shot_action(
     player: Player,
+    pot: int,
     amount_to_call: int,
     player_chips: int,
     community_cards: List[Card],
     betting_round: BettingRound,
+    function_name: str,
     model: str = "gpt-4o-mini",
 ) -> ActionResponse:
     """
-    Get action using LLM one-shot
+    Get action using LLM one-shot with fallback to hand-strength based action if LLM fails
 
     :param player: The player to get an action for
     :param amount_to_call: The bet amount required in order to stay in the hand
     :param player_chips: The number of chips the player has
     :param community_cards: The community cards currently on the table
     :param betting_round: The current betting round
+    :param function_name: The name of the function calling this for logging
+    :param model: The model to use for the completion
     :return: An ActionResponse object with the action and amount
     """
     # Build community cards string
@@ -235,23 +241,93 @@ async def get_llm_one_shot_action(
     else:
         community_cards_str = "Community cards: None (pre-flop)"
 
-    prompt = dedent(
-        f"""# Background
-        You're a pro poker player. Given the following game state, your job is to decide what action to take:
+    prompt = f"""# Background
+You're a pro poker player playing in a poker tournament. There is no buying back in. Given the following game state, your job is to decide what action to take:
 
-        # Game state
-        - Betting round: {betting_round.value}
-        - Amount of chips needing to be called: {amount_to_call}
-        - Your hole cards: {hand_to_string(player.hand)}
-        - {community_cards_str}
-        - You have {player_chips} chips
-        """
-    )
-    if amount_to_call == 0:
-        response = await get_completion_structured(prompt, CheckOrRaise, model=model)
+# Game state
+- Betting round: {betting_round.value}
+- Amount of chips needing to be called: {amount_to_call}
+- Your hole cards: {hand_to_string(player.hand)}
+- {community_cards_str}
+- The pot is {pot} chips
+- You have {player_chips} chips
+"""
+
+    try:
+        if amount_to_call == 0:
+            response = await get_completion_structured(prompt, CheckOrRaise, model=model, function_name=function_name)
+        else:
+            response = await get_completion_structured(
+                prompt, CallFoldOrRaise, model=model, function_name=function_name
+            )
+
+        # Handle case where LLM returns None for amount
+        amount = response.amount if response.amount is not None else 0
+        return ActionResponse(action=Action(response.action), amount=amount)
+
+    except Exception:
+        return await get_hand_strength_based_action(
+            player, pot, amount_to_call, player_chips, community_cards, betting_round
+        )
+
+
+async def get_llm_reasoning_action(
+    player: Player,
+    pot: int,
+    amount_to_call: int,
+    player_chips: int,
+    community_cards: List[Card],
+    betting_round: BettingRound,
+    function_name: str,
+    model: str = "gpt-4o-mini",
+) -> ActionResponse:
+    """
+    Get action using LLM with reasoning, fallback to hand-strength based action if LLM fails
+
+    :param player: The player to get an action for
+    :param amount_to_call: The bet amount required in order to stay in the hand
+    :param player_chips: The number of chips the player has
+    :param community_cards: The community cards currently on the table
+    :param betting_round: The current betting round
+    :param function_name: The name of the function calling this for logging
+    :param model: The model to use for the completion
+    :return: An ActionResponse object with the action and amount
+    """
+    # Build community cards string
+    if community_cards:
+        community_cards_str = f"Community cards: {hand_to_string(community_cards)}"
     else:
-        response = await get_completion_structured(prompt, CallFoldOrRaise, model=model)
+        community_cards_str = "Community cards: None (pre-flop)"
 
-    # Handle case where LLM returns None for amount
-    amount = response.amount if response.amount is not None else 0
-    return ActionResponse(action=Action(response.action), amount=amount)
+    prompt = f"""# Background
+You're a pro poker player in a tournament. No buying back in, so prioritize stack preservation. Decide your action given the game state:
+
+# Game state
+- Betting round: {betting_round.value}
+- Amount of chips needing to be called: {amount_to_call}
+- Your hole cards: {hand_to_string(player.hand)}
+- {community_cards_str}
+- The pot is {pot} chips
+- You have {player_chips} chips
+
+Keep your reasoning concise and focused on the key factors.
+"""
+
+    try:
+        if amount_to_call == 0:
+            response = await get_completion_structured(
+                prompt, CheckOrRaiseWithReasoning, model=model, function_name=function_name
+            )
+        else:
+            response = await get_completion_structured(
+                prompt, CallFoldOrRaiseWithReasoning, model=model, function_name=function_name
+            )
+
+        # Handle case where LLM returns None for amount
+        amount = response.amount if response.amount is not None else 0
+        return ActionResponse(action=Action(response.action), amount=amount)
+
+    except Exception:
+        return await get_hand_strength_based_action(
+            player, pot, amount_to_call, player_chips, community_cards, betting_round
+        )

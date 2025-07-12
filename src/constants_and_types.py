@@ -44,6 +44,7 @@ class BettingRound(StrEnum):
 class ActionResponse(BaseModel):
     action: Action
     amount: int
+    actual_amount_contributed: int = 0  # The actual amount the player contributed to the pot
 
 
 class BettingRoundResult(BaseModel):
@@ -101,5 +102,23 @@ class CheckOrRaise(BaseModel):
 
 
 class CallFoldOrRaise(BaseModel):
+    action: Literal["call", "fold", "raise"]
+    amount: Optional[int] = Field(None, description="The amount to raise if the action is raise. Otherwise, None.")
+
+
+class CheckOrRaiseWithReasoning(BaseModel):
+    reasoning: str = Field(
+        ...,
+        description="Think step by step (reasoning about bet sizing math, GTO play, etc.), and decide what action to take maximizes your expected value.",
+    )
+    action: Literal["check", "raise"]
+    amount: Optional[int] = Field(None, description="The amount to raise if the action is raise. Otherwise, None.")
+
+
+class CallFoldOrRaiseWithReasoning(BaseModel):
+    reasoning: str = Field(
+        ...,
+        description="Think step by step (reasoning about bet sizing math, GTO play, etc.), and decide what action to take maximizes your expected value.",
+    )
     action: Literal["call", "fold", "raise"]
     amount: Optional[int] = Field(None, description="The amount to raise if the action is raise. Otherwise, None.")

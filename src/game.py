@@ -26,13 +26,6 @@ def deal_cards(deck: List[Card], num_cards: int) -> List[Card]:
     return [deck.pop() for _ in range(num_cards)]
 
 
-def print_card_visual(card: Card) -> str:
-    """Return a visual representation of a card."""
-    rank, suit = card
-    rank_str = RANKS[rank - 2]
-    return f"{rank_str}{suit.value}"
-
-
 def evaluate_hand(hand: Hand) -> Tuple[int, List[int]]:
     """
     Evaluate poker hand strength.
@@ -224,19 +217,24 @@ def process_betting_action(
     pot: int,
     current_bet: int,
     active_players: List[Player],
-) -> Tuple[int, int, bool]:
-    """Process a betting action and return updated pot, current_bet, and whether there was a raise."""
+) -> Tuple[int, int, bool, int]:
+    """Process a betting action and return updated pot, current_bet, whether there was a raise, and actual amount contributed."""
 
     if action == Action.FOLD:
         active_players.remove(player)
-        return pot, current_bet, False
+        return pot, current_bet, False, 0
     elif action == Action.CHECK:
-        return pot, current_bet, False
+        return pot, current_bet, False, 0
     elif action == Action.CALL:
-        player_bets[player] += amount
-        player.chips -= amount
-        pot += amount
-        return pot, current_bet, False
+        # Calculate how much the player actually needs to call
+        to_call = current_bet - player_bets[player]
+        actual_call_amount = min(to_call, player.chips)
+
+        player_bets[player] += actual_call_amount
+        player.chips -= actual_call_amount
+        pot += actual_call_amount
+
+        return pot, current_bet, False, actual_call_amount
     elif action == Action.RAISE:
         # Calculate maximum callable amount by other players
         max_callable = calculate_max_callable_amount(player, player_bets, active_players)
@@ -257,7 +255,7 @@ def process_betting_action(
         new_current_bet = effective_total_bet
         was_raise = new_current_bet > current_bet
 
-        return pot, new_current_bet, was_raise
+        return pot, new_current_bet, was_raise, actual_amount
     else:
         raise ValueError(f"Invalid action: {action}")
 
@@ -304,15 +302,18 @@ async def betting_round(
         to_call = current_bet - player_bets[player]
 
         action_func = player.action_func
-        action_response = await action_func(player, to_call, player.chips, community_cards, betting_round_type)
+        action_response = await action_func(player, pot, to_call, player.chips, community_cards, betting_round_type)
+
+        # Process the action using game logic
+        pot, current_bet, was_raise, actual_amount = process_betting_action(
+            player, action_response.action, action_response.amount, player_bets, pot, current_bet, active_players
+        )
+
+        # Update the action response with the actual amount contributed
+        action_response.actual_amount_contributed = actual_amount
 
         # Store the action response for this player
         players_actions[player] = action_response
-
-        # Process the action using game logic
-        pot, current_bet, was_raise = process_betting_action(
-            player, action_response.action, action_response.amount, player_bets, pot, current_bet, active_players
-        )
 
         # If there was a raise, add other players back to act
         if was_raise:
