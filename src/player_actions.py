@@ -221,7 +221,7 @@ async def get_llm_one_shot_action(
     community_cards: List[Card],
     betting_round: BettingRound,
     function_name: str,
-    model: str = "gpt-4o-mini",
+    model: str,
 ) -> ActionResponse:
     """
     Get action using LLM one-shot with fallback to hand-strength based action if LLM fails
@@ -279,7 +279,7 @@ async def get_llm_reasoning_action(
     community_cards: List[Card],
     betting_round: BettingRound,
     function_name: str,
-    model: str = "gpt-4o-mini",
+    model: str,
 ) -> ActionResponse:
     """
     Get action using LLM with reasoning, fallback to hand-strength based action if LLM fails

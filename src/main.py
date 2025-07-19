@@ -17,7 +17,7 @@ def setup_players() -> List[Player]:
 
     :return: A list of players
     """
-    models = ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4.1-nano"]
+    models = ["gpt-4o-mini", "gpt-4.1-mini", "gpt-4.1-nano", "gpt-4.1"]
     strategies = [
         ("one_shot", get_llm_one_shot_action),
         ("reasoning", get_llm_reasoning_action),
@@ -90,7 +90,7 @@ async def run_games(n_games: int, max_rounds: int) -> List[GameResult]:
 
 
 async def main():
-    n_games = 100
+    n_games = 50
     max_rounds = 100
 
     clear_llm_log()

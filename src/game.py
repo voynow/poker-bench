@@ -295,7 +295,6 @@ async def betting_round(
 
     while len(players_to_act) > 0:
         player = players_to_act.pop(0)
-
         if player not in active_players:
             continue
 

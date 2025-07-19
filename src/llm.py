@@ -18,6 +18,7 @@ MODEL_PRICING = {
     "gpt-4o-mini": {"input": 0.15, "output": 0.60},
     "gpt-4.1-mini": {"input": 0.40, "output": 1.60},
     "gpt-4.1-nano": {"input": 0.10, "output": 0.40},
+    "gpt-4.1": {"input": 2.00, "output": 8.00},
 }
 
 
